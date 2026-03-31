@@ -5,7 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     let driveManager = NetworkDriveManager()
-    let volumeMonitor = VolumeMonitor()
+    private let notificationManager = NotificationManager()
 
     private var preferencesWindow: NSWindow?
     private var aboutWindow: NSWindow?
@@ -13,8 +13,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - App Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        notificationManager.configure()
         setupStatusItem()
-        setupVolumeMonitor()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.notificationManager.requestAuthorizationIfNeeded()
+        }
     }
 
     private func setupStatusItem() {
@@ -30,13 +34,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.delegate = self
         statusItem.menu = menu
-    }
-
-    private func setupVolumeMonitor() {
-        volumeMonitor.onVolumesChanged = { [weak self] in
-            _ = self
-        }
-        volumeMonitor.start()
     }
 
     // MARK: - NSMenuDelegate
@@ -68,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 name: drive.displayName,
                 connected: mounted
             ) { [weak self] in
-                self?.driveManager.mount(drive)
+                self?.connectDrive(drive)
             }
             item.view = view
             menu.addItem(item)
@@ -92,7 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             icon.size = NSSize(width: 16, height: 16)
 
             let view = VolumeMenuItemView(icon: icon, name: volume.name) { [weak self] in
-                self?.ejectVolume(at: volume.volumeURL)
+                self?.ejectVolume(named: volume.name, at: volume.volumeURL)
             }
             item.view = view
             item.toolTip = "Click to eject \(volume.name)"
@@ -129,18 +126,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Actions
 
-    private func ejectVolume(at url: URL) {
+    private func connectDrive(_ drive: NetworkDrive) {
+        driveManager.mount(drive) { _ in }
+    }
+
+    private func ejectVolume(named volumeName: String, at url: URL) {
         FileManager.default.unmountVolume(
             at: url,
             options: [.allPartitionsAndEjectDisk]
         ) { error in
-            guard let error else { return }
             DispatchQueue.main.async {
-                let alert = NSAlert()
-                alert.messageText = "Eject Failed"
-                alert.informativeText = error.localizedDescription
-                alert.alertStyle = .warning
-                alert.runModal()
+                if let error {
+                    self.notificationManager.showEjectFailed(volumeName, details: error.localizedDescription)
+                } else {
+                    self.notificationManager.showEjected(volumeName)
+                }
             }
         }
     }

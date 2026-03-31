@@ -12,7 +12,8 @@ FRAMEWORKS := -framework Cocoa \
               -framework SwiftUI \
               -framework DiskArbitration \
               -framework NetFS \
-              -framework Security
+			  -framework Security \
+			  -framework UserNotifications
 
 BINARY := $(MACOS_DIR)/$(APP_NAME)
 PLIST := $(CONTENTS)/Info.plist
@@ -28,6 +29,7 @@ $(BINARY): $(SOURCES)
 $(PLIST): Resources/Info.plist
 	@mkdir -p "$(@D)"
 	@cp "$<" "$@"
+	@codesign --sign - --force --deep "$(APP_BUNDLE)"
 
 # Phony targets
 .PHONY: all clean run debug install
