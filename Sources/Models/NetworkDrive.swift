@@ -6,6 +6,10 @@ struct NetworkDrive: Codable, Identifiable, Hashable {
     var label: String?
     var autoConnect: Bool
 
+    var schemeLabel: String {
+        URL(string: url)?.scheme?.uppercased() ?? "?"
+    }
+
     var displayName: String {
         if let label, !label.isEmpty {
             return label

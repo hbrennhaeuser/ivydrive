@@ -41,7 +41,8 @@ final class VolumeMonitor {
             .volumeIsRemovableKey,
             .volumeIsEjectableKey,
             .volumeIsInternalKey,
-            .volumeIsLocalKey
+            .volumeIsLocalKey,
+            .volumeTypeNameKey
         ]
 
         let urls = FileManager.default.mountedVolumeURLs(
@@ -61,14 +62,43 @@ final class VolumeMonitor {
             guard !url.path.hasPrefix("/System/") else { return nil }
             guard isEjectable || isRemovable || !isInternal || !isLocal else { return nil }
 
+            let deviceType = classifyDevice(
+                typeName: values.volumeTypeName ?? "",
+                isLocal: isLocal,
+                isRemovable: isRemovable,
+                isEjectable: isEjectable,
+                isInternal: isInternal
+            )
+
             return MountedVolume(
                 name: values.volumeName ?? url.lastPathComponent,
                 path: url.path,
-                isRemovable: isRemovable,
-                isNetwork: !isLocal,
-                isInternal: isInternal,
+                deviceType: deviceType,
                 volumeURL: url
             )
         }
+        .sorted { ($0.deviceType, $0.name.lowercased()) < ($1.deviceType, $1.name.lowercased()) }
+    }
+
+    private static func classifyDevice(
+        typeName: String,
+        isLocal: Bool,
+        isRemovable: Bool,
+        isEjectable: Bool,
+        isInternal: Bool
+    ) -> DeviceType {
+        if !isLocal { return .network }
+
+        let opticalTypes = ["cd9660", "udf", "cddafs"]
+        if opticalTypes.contains(typeName.lowercased()) && isRemovable {
+            return .optical
+        }
+
+        if isRemovable { return .usb }
+
+        // Ejectable + local + not removable + not internal = disk image
+        if isEjectable && !isInternal { return .diskImage }
+
+        return .other
     }
 }

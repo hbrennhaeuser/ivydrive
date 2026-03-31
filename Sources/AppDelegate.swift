@@ -62,15 +62,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         for drive in driveManager.drives {
             let mounted = driveManager.isMounted(drive)
-            let item = NSMenuItem(
-                title: drive.displayName,
-                action: #selector(handleDriveClick(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = drive.id
-            item.image = statusIndicator(connected: mounted)
-            item.toolTip = mounted ? "Click to open in Finder" : "Click to connect"
+            let item = NSMenuItem()
+
+            let view = NetworkDriveMenuItemView(
+                name: drive.displayName,
+                connected: mounted
+            ) { [weak self] in
+                self?.driveManager.mount(drive)
+            }
+            item.view = view
             menu.addItem(item)
         }
     }
@@ -86,17 +86,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         for volume in volumes {
-            let item = NSMenuItem(
-                title: volume.name,
-                action: #selector(handleEjectClick(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = volume.volumeURL
+            let item = NSMenuItem()
 
             let icon = NSWorkspace.shared.icon(forFile: volume.path)
             icon.size = NSSize(width: 16, height: 16)
-            item.image = icon
+
+            let view = VolumeMenuItemView(icon: icon, name: volume.name) { [weak self] in
+                self?.ejectVolume(at: volume.volumeURL)
+            }
+            item.view = view
             item.toolTip = "Click to eject \(volume.name)"
 
             menu.addItem(item)
@@ -131,20 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Actions
 
-    @objc private func handleDriveClick(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? UUID,
-              let drive = driveManager.drives.first(where: { $0.id == id }) else { return }
-
-        if let mountPoint = driveManager.mountPoint(for: drive) {
-            NSWorkspace.shared.open(mountPoint)
-        } else {
-            driveManager.mount(drive)
-        }
-    }
-
-    @objc private func handleEjectClick(_ sender: NSMenuItem) {
-        guard let url = sender.representedObject as? URL else { return }
-
+    private func ejectVolume(at url: URL) {
         FileManager.default.unmountVolume(
             at: url,
             options: [.allPartitionsAndEjectDisk]
@@ -197,16 +182,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    // MARK: - Helpers
-
-    private func statusIndicator(connected: Bool) -> NSImage? {
-        let symbolName = connected ? "circle.fill" : "circle"
-        let color: NSColor = connected ? .systemGreen : .systemRed
-        let config = NSImage.SymbolConfiguration(pointSize: 8, weight: .regular)
-            .applying(.init(paletteColors: [color]))
-        return NSImage(
-            systemSymbolName: symbolName,
-            accessibilityDescription: connected ? "Connected" : "Disconnected"
-        )?.withSymbolConfiguration(config)
-    }
 }

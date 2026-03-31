@@ -10,7 +10,14 @@ struct PreferencesView: View {
         VStack(spacing: 0) {
             List(selection: $selection) {
                 ForEach(manager.drives) { drive in
-                    HStack {
+                    HStack(spacing: 10) {
+                        Text(drive.schemeLabel)
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                            .fixedSize()
                         VStack(alignment: .leading, spacing: 2) {
                             Text(drive.displayName)
                                 .fontWeight(.medium)

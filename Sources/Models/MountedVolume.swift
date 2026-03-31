@@ -1,11 +1,21 @@
 import Foundation
 
+enum DeviceType: Int, Comparable {
+    case optical = 0
+    case usb = 1
+    case diskImage = 2
+    case network = 3
+    case other = 4
+
+    static func < (lhs: DeviceType, rhs: DeviceType) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}
+
 struct MountedVolume: Identifiable {
     let id = UUID()
     let name: String
     let path: String
-    let isRemovable: Bool
-    let isNetwork: Bool
-    let isInternal: Bool
+    let deviceType: DeviceType
     let volumeURL: URL
 }
