@@ -7,7 +7,7 @@ macOS menu bar app for managing network drives and ejectable volumes.
 - Configure and connect network drives (SMB, NFS, AFP, WebDAV)
 - Eject USB drives, CDs, DMGs, and network volumes from one place
 - Green/red status indicators for drive connectivity
-- Keychain-stored credentials
+- Use native macOS authentication prompts for network drive credentials
 - No dock icon - lives entirely in the menu bar
 
 ## Requirements
@@ -21,12 +21,6 @@ macOS menu bar app for managing network drives and ejectable volumes.
 make
 ```
 
-## Run
-
-```sh
-make run
-```
-
 ## Debug Build
 
 ```sh
@@ -38,7 +32,6 @@ make debug
 ```sh
 make install
 ```
-
 Copies `MenuBarFS.app` to `/Applications/`.
 
 ## Project Structure
@@ -53,7 +46,6 @@ Sources/
   Services/
     NetworkDriveManager.swift       Drive config persistence + NetFS mount
     VolumeMonitor.swift             DiskArbitration observer + volume queries
-    KeychainHelper.swift            Credential storage via Security framework
   Views/
     PreferencesView.swift           SwiftUI preferences window
     DriveFormView.swift             SwiftUI add/edit drive form
@@ -64,4 +56,4 @@ Resources/
 
 ## License
 
-MIT
+GNU General Public License v3.0
