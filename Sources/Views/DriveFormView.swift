@@ -8,8 +8,6 @@ struct DriveFormView: View {
 
     @State private var url = ""
     @State private var label = ""
-    @State private var username = ""
-    @State private var password = ""
 
     private var isEditing: Bool { drive != nil }
 
@@ -31,17 +29,6 @@ struct DriveFormView: View {
                 TextField("Optional — defaults to hostname", text: $label)
                     .textFieldStyle(.roundedBorder)
 
-                Divider()
-
-                Text("Credentials (optional)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                TextField("Username", text: $username)
-                    .textFieldStyle(.roundedBorder)
-
-                SecureField("Password", text: $password)
-                    .textFieldStyle(.roundedBorder)
             }
 
             HStack {
@@ -62,10 +49,6 @@ struct DriveFormView: View {
         guard let drive else { return }
         url = drive.url
         label = drive.label ?? ""
-        if let creds = KeychainHelper.load(for: drive.id) {
-            username = creds.username
-            password = creds.password
-        }
     }
 
     private func save() {
@@ -76,7 +59,6 @@ struct DriveFormView: View {
             existing.url = trimmedURL
             existing.label = trimmedLabel.isEmpty ? nil : trimmedLabel
             manager.update(existing)
-            saveCredentials(for: existing.id)
         } else {
             let newDrive = NetworkDrive(
                 id: UUID(),
@@ -85,17 +67,7 @@ struct DriveFormView: View {
                 autoConnect: false
             )
             manager.add(newDrive)
-            saveCredentials(for: newDrive.id)
         }
         dismiss()
-    }
-
-    private func saveCredentials(for id: UUID) {
-        let trimmedUser = username.trimmingCharacters(in: .whitespaces)
-        if !trimmedUser.isEmpty {
-            KeychainHelper.save(Credentials(username: trimmedUser, password: password), for: id)
-        } else {
-            KeychainHelper.delete(for: id)
-        }
     }
 }

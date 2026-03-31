@@ -20,7 +20,6 @@ final class NetworkDriveManager: ObservableObject {
 
     func remove(_ drive: NetworkDrive) {
         drives.removeAll { $0.id == drive.id }
-        KeychainHelper.delete(for: drive.id)
         save()
     }
 
@@ -68,15 +67,14 @@ final class NetworkDriveManager: ObservableObject {
 
     func mount(_ drive: NetworkDrive) {
         guard let url = URL(string: drive.url) else { return }
-        let credentials = KeychainHelper.load(for: drive.id)
 
         DispatchQueue.global(qos: .userInitiated).async {
             var mountPoints: Unmanaged<CFArray>?
             let status = NetFSMountURLSync(
                 url as CFURL,
                 nil,
-                credentials?.username as CFString?,
-                credentials?.password as CFString?,
+                nil,
+                nil,
                 nil,
                 nil,
                 &mountPoints
