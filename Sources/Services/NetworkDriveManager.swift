@@ -2,6 +2,12 @@ import Foundation
 import NetFS
 import AppKit
 
+enum DriveMountOutcome {
+    case mounted
+    case requiresUserInteraction
+    case failed(String)
+}
+
 final class NetworkDriveManager: ObservableObject {
     @Published var drives: [NetworkDrive] = []
 
@@ -65,8 +71,11 @@ final class NetworkDriveManager: ObservableObject {
 
     // MARK: - Mount
 
-    func mount(_ drive: NetworkDrive) {
-        guard let url = URL(string: drive.url) else { return }
+    func mount(_ drive: NetworkDrive, completion: @escaping (DriveMountOutcome) -> Void) {
+        guard let url = URL(string: drive.url) else {
+            completion(.failed("Invalid drive URL."))
+            return
+        }
 
         DispatchQueue.global(qos: .userInitiated).async {
             var mountPoints: Unmanaged<CFArray>?
@@ -80,9 +89,16 @@ final class NetworkDriveManager: ObservableObject {
                 &mountPoints
             )
 
-            if status != 0 {
-                DispatchQueue.main.async {
-                    NSWorkspace.shared.open(url)
+            DispatchQueue.main.async {
+                guard status != 0 else {
+                    completion(.mounted)
+                    return
+                }
+
+                if NSWorkspace.shared.open(url) {
+                    completion(.requiresUserInteraction)
+                } else {
+                    completion(.failed("Could not start the connection request."))
                 }
             }
         }
