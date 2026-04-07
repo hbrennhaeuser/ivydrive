@@ -136,11 +136,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        menu.addItem(NSMenuItem(
+        let quitItem = NSMenuItem(
             title: "Quit MenuBarFS",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
-        ))
+        )
+        quitItem.target = NSApp
+        menu.addItem(quitItem)
     }
 
     // MARK: - Actions
