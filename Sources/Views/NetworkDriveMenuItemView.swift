@@ -27,11 +27,13 @@ private final class StatusBubbleView: NSView {
 /// and triggers a connect-all for the group on click.
 final class NetworkGroupHeaderView: NSView {
     private let onConnect: (() -> Void)?
+    private let showAccentBar: Bool
     private var isHovered = false
     private var trackingArea: NSTrackingArea?
 
-    init(host: String, onConnect: (() -> Void)? = nil) {
+    init(host: String, onConnect: (() -> Void)? = nil, showAccentBar: Bool = false) {
         self.onConnect = onConnect
+        self.showAccentBar = showAccentBar
 
         let label = NSTextField(labelWithString: host)
         label.font = .systemFont(ofSize: 11, weight: .semibold)
@@ -59,6 +61,11 @@ final class NetworkGroupHeaderView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override func draw(_ dirtyRect: NSRect) {
+        if showAccentBar {
+            let bar = NSRect(x: 8, y: 0, width: 2, height: bounds.height)
+            NSColor.tertiaryLabelColor.setFill()
+            NSBezierPath(roundedRect: bar, xRadius: 1, yRadius: 1).fill()
+        }
         guard isHovered, onConnect != nil else { return }
         NSColor.labelColor.withAlphaComponent(0.08).setFill()
         NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 2), xRadius: 5, yRadius: 5).fill()
@@ -90,7 +97,6 @@ final class NetworkGroupHeaderView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         guard let action = onConnect else { return }
-        enclosingMenuItem?.menu?.cancelTracking()
         action()
     }
 }
@@ -101,9 +107,10 @@ final class NetworkDriveMenuItemView: NSView {
     private let nameLabel: NSTextField
     private let drive: NetworkDrive
     private let isConnected: Bool
-    private let isInProgress: Bool
+    private var isInProgress: Bool
     private let mountPoint: URL?
     private let availability: DriveAvailabilityResult?
+    private let showAccentBar: Bool
     private let onAction: () -> Void
     private var isHovered = false
     private var trackingArea: NSTrackingArea?
@@ -115,6 +122,7 @@ final class NetworkDriveMenuItemView: NSView {
         availability: DriveAvailabilityResult? = nil,
         operation: DriveOperation? = nil,
         indented: Bool = false,
+        showAccentBar: Bool = false,
         onAction: @escaping () -> Void
     ) {
         self.drive = drive
@@ -122,6 +130,7 @@ final class NetworkDriveMenuItemView: NSView {
         self.isInProgress = operation == .connecting
         self.mountPoint = mountPoint
         self.availability = availability
+        self.showAccentBar = showAccentBar
         self.onAction = onAction
 
         let fillColor: NSColor
@@ -190,6 +199,11 @@ final class NetworkDriveMenuItemView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override func draw(_ dirtyRect: NSRect) {
+        if showAccentBar {
+            let bar = NSRect(x: 8, y: 0, width: 2, height: bounds.height)
+            NSColor.tertiaryLabelColor.setFill()
+            NSBezierPath(roundedRect: bar, xRadius: 1, yRadius: 1).fill()
+        }
         guard isHovered else { return }
         NSColor.labelColor.withAlphaComponent(0.08).setFill()
         NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 2), xRadius: 5, yRadius: 5).fill()
@@ -236,7 +250,14 @@ final class NetworkDriveMenuItemView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         guard !isConnected, !isInProgress else { return }
-        enclosingMenuItem?.menu?.cancelTracking()
+        showConnecting()
         onAction()
+    }
+
+    private func showConnecting() {
+        isInProgress = true
+        bubbleView.alphaValue = 0
+        spinner.isHidden = false
+        spinner.startAnimation(nil)
     }
 }
