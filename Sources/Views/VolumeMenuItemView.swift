@@ -97,6 +97,82 @@ private final class CapacityBarView: NSView {
     }
 }
 
+/// Header row for a group of connected volumes sharing the same server host.
+/// Optionally shows a capacity bar when all volumes in the group have identical total capacity.
+/// Not interactive — no hover, no eject.
+final class VolumeGroupHeaderView: NSView {
+    init(host: String, capacity: VolumeCapacity?) {
+        let label = NSTextField(labelWithString: host)
+        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byTruncatingTail
+        label.isEditable = false
+        label.isBordered = false
+        label.drawsBackground = false
+
+        let ud = UserDefaults.standard
+        let showBar   = capacity != nil && ud.bool(forKey: "showCapacityLine")
+        let showStats = showBar && ud.bool(forKey: "showCapacityStats")
+
+        var totalHeight: CGFloat = 24
+        let barView: CapacityBarView? = showBar ? CapacityBarView(fraction: capacity!.fraction) : nil
+        if barView != nil { totalHeight += 8 }
+
+        let statsTF: NSTextField?
+        if showStats, let cap = capacity {
+            let pct = Int(cap.fraction * 100)
+            let tf = NSTextField(labelWithString:
+                "Used \(formatBytes(cap.usedBytes)) from \(formatBytes(cap.totalBytes)) (\(pct)%)")
+            tf.font = .systemFont(ofSize: 10)
+            tf.textColor = .secondaryLabelColor
+            tf.isEditable = false
+            tf.isBordered = false
+            tf.drawsBackground = false
+            statsTF = tf
+            totalHeight += 14
+        } else {
+            statsTF = nil
+        }
+
+        super.init(frame: NSRect(x: 0, y: 0, width: 280, height: totalHeight))
+        autoresizingMask = .width
+
+        for v in ([label, barView, statsTF] as [NSView?]).compactMap({ $0 }) {
+            v.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(v)
+        }
+
+        var c: [NSLayoutConstraint] = [
+            heightAnchor.constraint(equalToConstant: totalHeight),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 19),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+        ]
+
+        if let bar = barView {
+            c += [
+                bar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 19),
+                bar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+                bar.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 2),
+                bar.heightAnchor.constraint(equalToConstant: 4),
+            ]
+        }
+
+        if let stats = statsTF {
+            let anchor: NSView = barView ?? label
+            c += [
+                stats.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 19),
+                stats.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+                stats.topAnchor.constraint(equalTo: anchor.bottomAnchor, constant: 2),
+            ]
+        }
+
+        NSLayoutConstraint.activate(c)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+}
+
 final class VolumeMenuItemView: NSView {
     private let nameLabel: NSTextField
     private let ejectButton: EjectButtonView
@@ -106,7 +182,7 @@ final class VolumeMenuItemView: NSView {
     private var isHovered = false
     private var trackingArea: NSTrackingArea?
 
-    init(icon: NSImage, name: String, volumeURL: URL, deviceType: DeviceType, capacity: VolumeCapacity? = nil, onEject: @escaping () -> Void) {
+    init(icon: NSImage, name: String, volumeURL: URL, deviceType: DeviceType, capacity: VolumeCapacity? = nil, indented: Bool = false, onEject: @escaping () -> Void) {
         self.volumeURL = volumeURL
         self.deviceType = deviceType
 
@@ -167,7 +243,7 @@ final class VolumeMenuItemView: NSView {
         var c: [NSLayoutConstraint] = [
             heightAnchor.constraint(equalToConstant: totalHeight),
 
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 19),
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: indented ? 35 : 19),
             iconView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             iconView.widthAnchor.constraint(equalToConstant: 16),
             iconView.heightAnchor.constraint(equalToConstant: 16),

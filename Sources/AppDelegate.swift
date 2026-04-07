@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "showCapacityStats":         true,
             "useBinaryUnits":            false,
             "hideCapacityForReadOnly":   true,
+            "groupDrivesByHost":         true,
+            "hideConnectedFromAvailable": false,
         ])
         notificationManager.configure()
         setupStatusItem()
@@ -67,32 +69,100 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Menu Sections
 
     private func buildNetworkDrivesSection(in menu: NSMenu, availability: [UUID: DriveAvailabilityResult]) {
-        if driveManager.drives.isEmpty {
+        let ud = UserDefaults.standard
+        let groupByHost   = ud.bool(forKey: "groupDrivesByHost")
+        let hideConnected = ud.bool(forKey: "hideConnectedFromAvailable")
+        let allDrives = driveManager.drives
+
+        if allDrives.isEmpty {
             let item = NSMenuItem(title: "No network drives configured", action: nil, keyEquivalent: "")
             item.isEnabled = false
             menu.addItem(item)
             return
         }
 
-        for drive in driveManager.drives {
-            let mounted = driveManager.isMounted(drive)
-            let item = NSMenuItem()
+        let connectedIDs = Set(allDrives.filter { driveManager.isMounted($0) }.map { $0.id })
 
-            let view = NetworkDriveMenuItemView(
-                drive: drive,
-                connected: mounted,
-                mountPoint: driveManager.mountPoint(for: drive),
-                availability: availability[drive.id]
-            ) { [weak self] in
-                self?.connectDrive(drive)
+        if !groupByHost {
+            var added = false
+            for drive in allDrives {
+                let mounted = connectedIDs.contains(drive.id)
+                if hideConnected && mounted { continue }
+                addNetworkDriveItem(drive, mounted: mounted, availability: availability, to: menu, indented: false)
+                added = true
             }
-            item.view = view
+            if !added {
+                let item = NSMenuItem(title: "All drives connected", action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                menu.addItem(item)
+            }
+            return
+        }
+
+        // Group by scheme://host:port
+        var keyOrder: [String] = []
+        var drivesForKey: [String: [NetworkDrive]] = [:]
+        for drive in allDrives {
+            let key = drive.hostGroupKey
+            if drivesForKey[key] == nil { keyOrder.append(key) }
+            drivesForKey[key, default: []].append(drive)
+        }
+
+        var addedAny = false
+        for key in keyOrder {
+            let groupDrives = drivesForKey[key]!
+            let unconnectedInGroup = groupDrives.filter { !connectedIDs.contains($0.id) }
+            let entriesToShow = hideConnected ? unconnectedInGroup : groupDrives
+            if entriesToShow.isEmpty { continue }
+            addedAny = true
+
+            if groupDrives.count == 1 {
+                let drive = groupDrives[0]
+                addNetworkDriveItem(drive, mounted: connectedIDs.contains(drive.id), availability: availability, to: menu, indented: false)
+                continue
+            }
+
+            // Multi-drive group: non-interactive header + indented sub-entries
+            let headerItem = NSMenuItem()
+            headerItem.view = NetworkGroupHeaderView(host: URL(string: key)?.host ?? key)
+            menu.addItem(headerItem)
+
+            for drive in entriesToShow {
+                addNetworkDriveItem(drive, mounted: connectedIDs.contains(drive.id), availability: availability, to: menu, indented: true)
+            }
+        }
+
+        if !addedAny {
+            let item = NSMenuItem(title: "All drives connected", action: nil, keyEquivalent: "")
+            item.isEnabled = false
             menu.addItem(item)
         }
     }
 
+    private func addNetworkDriveItem(
+        _ drive: NetworkDrive,
+        mounted: Bool,
+        availability: [UUID: DriveAvailabilityResult],
+        to menu: NSMenu,
+        indented: Bool
+    ) {
+        let item = NSMenuItem()
+        let view = NetworkDriveMenuItemView(
+            drive: drive,
+            connected: mounted,
+            mountPoint: driveManager.mountPoint(for: drive),
+            availability: availability[drive.id],
+            indented: indented
+        ) { [weak self] in
+            self?.connectDrive(drive)
+        }
+        item.view = view
+        menu.addItem(item)
+    }
+
     private func buildEjectableVolumesSection(in menu: NSMenu) {
         let volumes = VolumeMonitor.ejectableVolumes()
+        let groupByHost = UserDefaults.standard.bool(forKey: "groupDrivesByHost")
 
         if volumes.isEmpty {
             let item = NSMenuItem(title: "No ejectable volumes", action: nil, keyEquivalent: "")
@@ -103,30 +173,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let capacities = prefetchCapacities(for: volumes)
 
-        for volume in volumes {
-            let item = NSMenuItem()
-
-            let icon: NSImage
-            if volume.deviceType == .network {
-                // Avoid icon(forFile:) on network volume paths — it can block when
-                // the volume is mounted but the network is unreachable.
-                icon = NSImage(
-                    systemSymbolName: "externaldrive.connected.to.line.below",
-                    accessibilityDescription: "Network Drive"
-                ) ?? NSImage()
-            } else {
-                icon = NSWorkspace.shared.icon(forFile: volume.path)
+        if !groupByHost {
+            for volume in volumes {
+                addVolumeItem(volume, capacity: capacities[volume.volumeURL], to: menu, indented: false)
             }
-            icon.size = NSSize(width: 16, height: 16)
-
-            let view = VolumeMenuItemView(icon: icon, name: volume.name, volumeURL: volume.volumeURL, deviceType: volume.deviceType, capacity: capacities[volume.volumeURL]) { [weak self] in
-                self?.ejectVolume(named: volume.name, at: volume.volumeURL)
-            }
-            item.view = view
-            item.toolTip = "Click to eject \(volume.name)"
-
-            menu.addItem(item)
+            return
         }
+
+        // Local volumes rendered flat first
+        for volume in volumes where volume.remoteHost == nil {
+            addVolumeItem(volume, capacity: capacities[volume.volumeURL], to: menu, indented: false)
+        }
+
+        // Group network volumes by lowercase host
+        var hostOrder: [String] = []
+        var volumesForHost: [String: [MountedVolume]] = [:]
+        for volume in volumes where volume.remoteHost != nil {
+            let host = volume.remoteHost!
+            if volumesForHost[host] == nil { hostOrder.append(host) }
+            volumesForHost[host, default: []].append(volume)
+        }
+
+        for host in hostOrder {
+            let groupVolumes = volumesForHost[host]!
+
+            if groupVolumes.count == 1 {
+                addVolumeItem(groupVolumes[0], capacity: capacities[groupVolumes[0].volumeURL], to: menu, indented: false)
+                continue
+            }
+
+            // Capacity is shown on the header when every volume in the group
+            // has the same total bytes; otherwise it appears on individual entries.
+            let groupCapacities = groupVolumes.compactMap { capacities[$0.volumeURL] }
+            let allUniform = groupCapacities.count == groupVolumes.count
+                && Set(groupCapacities.map { $0.totalBytes }).count == 1
+
+            let headerItem = NSMenuItem()
+            headerItem.view = VolumeGroupHeaderView(host: host, capacity: allUniform ? groupCapacities.first : nil)
+            menu.addItem(headerItem)
+
+            for volume in groupVolumes {
+                addVolumeItem(volume, capacity: allUniform ? nil : capacities[volume.volumeURL], to: menu, indented: true)
+            }
+        }
+    }
+
+    private func addVolumeItem(_ volume: MountedVolume, capacity: VolumeCapacity?, to menu: NSMenu, indented: Bool) {
+        let item = NSMenuItem()
+
+        let icon: NSImage
+        if volume.deviceType == .network {
+            // Avoid icon(forFile:) on network volume paths — it can block when
+            // the volume is mounted but the network is unreachable.
+            icon = NSImage(
+                systemSymbolName: "externaldrive.connected.to.line.below",
+                accessibilityDescription: "Network Drive"
+            ) ?? NSImage()
+        } else {
+            icon = NSWorkspace.shared.icon(forFile: volume.path)
+        }
+        icon.size = NSSize(width: 16, height: 16)
+
+        let view = VolumeMenuItemView(
+            icon: icon,
+            name: volume.name,
+            volumeURL: volume.volumeURL,
+            deviceType: volume.deviceType,
+            capacity: capacity,
+            indented: indented
+        ) { [weak self] in
+            self?.ejectVolume(named: volume.name, at: volume.volumeURL)
+        }
+        item.view = view
+        item.toolTip = "Click to eject \(volume.name)"
+        menu.addItem(item)
     }
 
     /// Fetches capacity for all volumes in parallel. Waits at most 200 ms for the

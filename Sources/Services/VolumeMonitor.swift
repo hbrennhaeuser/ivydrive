@@ -70,7 +70,8 @@ final class VolumeMonitor {
                     name:       values.volumeName ?? url.lastPathComponent,
                     path:       mount.mountPoint,
                     deviceType: deviceType,
-                    volumeURL:  url
+                    volumeURL:  url,
+                    remoteHost: nil
                 )
             } else {
                 // Network volume — do not query the filesystem to avoid blocking
@@ -79,7 +80,8 @@ final class VolumeMonitor {
                     name:       url.lastPathComponent,
                     path:       mount.mountPoint,
                     deviceType: .network,
-                    volumeURL:  url
+                    volumeURL:  url,
+                    remoteHost: parseRemoteSource(mount.source)?.host
                 )
             }
         }

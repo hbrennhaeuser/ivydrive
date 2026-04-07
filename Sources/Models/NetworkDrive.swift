@@ -51,4 +51,17 @@ struct NetworkDrive: Codable, Identifiable, Hashable {
         }
         return url
     }
+
+    /// Grouping key for drives sharing the same server: "scheme://host[:port]".
+    var hostGroupKey: String {
+        guard let parsed = URL(string: url), let host = parsed.host else { return url }
+        let scheme = parsed.scheme ?? ""
+        let port = parsed.port.map { ":\($0)" } ?? ""
+        return "\(scheme)://\(host.lowercased())\(port)"
+    }
+
+    /// Bare hostname for display in group headers.
+    var normalizedHostDisplay: String {
+        URL(string: url)?.host?.lowercased() ?? url
+    }
 }

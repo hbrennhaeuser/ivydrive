@@ -18,6 +18,7 @@ struct MountedVolume: Identifiable {
     let path: String
     let deviceType: DeviceType
     let volumeURL: URL
+    let remoteHost: String?
 }
 
 struct VolumeCapacity {
