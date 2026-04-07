@@ -129,7 +129,31 @@ extension DriveInfoPanel {
         if capacityRelevant {
             keys.formUnion([.volumeTotalCapacityKey, .volumeAvailableCapacityKey])
         }
-        guard let values = try? url.resourceValues(forKeys: keys) else { return [] }
+
+        // Use the kernel mount table (non-blocking) to decide whether this is a
+        // network volume. Capacity and metadata queries on network volumes can
+        // block indefinitely when the mount is stale (network down, drive gone).
+        let isLocal = currentMounts().first { $0.mountPoint == url.path }?.isLocal ?? true
+
+        let values: URLResourceValues?
+        if isLocal {
+            values = try? url.resourceValues(forKeys: keys)
+        } else {
+            // Fetch on a separate thread with a short timeout so a stale network
+            // mount never blocks the caller (which runs on a background thread).
+            var fetched: URLResourceValues?
+            let sema = DispatchSemaphore(value: 0)
+            DispatchQueue.global(qos: .utility).async {
+                fetched = try? url.resourceValues(forKeys: keys)
+                sema.signal()
+            }
+            if sema.wait(timeout: .now() + 1.5) == .timedOut {
+                return [("Mount", url.path), ("Status", "Volume unreachable")]
+            }
+            values = fetched
+        }
+
+        guard let values else { return [] }
 
         var rows: [(String, String)] = []
 

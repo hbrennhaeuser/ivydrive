@@ -51,18 +51,22 @@ final class NetworkDriveManager: ObservableObject {
     // MARK: - Mount Status
 
     func mountPoint(for drive: NetworkDrive) -> URL? {
-        guard let driveURL = URL(string: drive.url) else { return nil }
-        let volumes = FileManager.default.mountedVolumeURLs(
-            includingResourceValuesForKeys: [.volumeURLForRemountingKey],
-            options: []
-        ) ?? []
+        guard let driveURL = URL(string: drive.url), let driveHost = driveURL.host else { return nil }
+        let normalizedHost = driveHost.lowercased()
+        let normalizedPath = driveURL.path
+            .lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
 
-        return volumes.first { url in
-            guard let values = try? url.resourceValues(forKeys: [.volumeURLForRemountingKey]),
-                  let remountURL = values.volumeURLForRemounting else { return false }
-            return remountURL.host?.lowercased() == driveURL.host?.lowercased()
-                && remountURL.path.lowercased() == driveURL.path.lowercased()
+        // currentMounts() uses getfsstat(MNT_NOWAIT) — never contacts remote volumes,
+        // so it cannot block even if a network drive is mounted but unreachable.
+        for mount in currentMounts() where !mount.isLocal {
+            guard let (mfHost, mfPath) = parseRemoteSource(mount.source) else { continue }
+            guard mfHost == normalizedHost else { continue }
+            let normalizedMfPath = mfPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            guard normalizedMfPath == normalizedPath else { continue }
+            return URL(fileURLWithPath: mount.mountPoint)
         }
+        return nil
     }
 
     func isMounted(_ drive: NetworkDrive) -> Bool {

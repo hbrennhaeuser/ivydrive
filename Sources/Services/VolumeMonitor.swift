@@ -36,46 +36,52 @@ final class VolumeMonitor {
     }
 
     static func ejectableVolumes() -> [MountedVolume] {
-        let keys: Set<URLResourceKey> = [
-            .volumeNameKey,
-            .volumeIsRemovableKey,
-            .volumeIsEjectableKey,
-            .volumeIsInternalKey,
-            .volumeIsLocalKey,
-            .volumeTypeNameKey
-        ]
+        // currentMounts() uses getfsstat(MNT_NOWAIT) — never contacts remote volumes,
+        // so it cannot block even if a network drive is mounted but unreachable.
+        return currentMounts().compactMap { mount -> MountedVolume? in
+            guard mount.mountPoint != "/" && !mount.mountPoint.hasPrefix("/System/") else { return nil }
 
-        let urls = FileManager.default.mountedVolumeURLs(
-            includingResourceValuesForKeys: Array(keys),
-            options: [.skipHiddenVolumes]
-        ) ?? []
+            let url = URL(fileURLWithPath: mount.mountPoint)
 
-        return urls.compactMap { url -> MountedVolume? in
-            guard let values = try? url.resourceValues(forKeys: keys) else { return nil }
+            if mount.isLocal {
+                // Resource value queries are safe for local volumes.
+                let keys: Set<URLResourceKey> = [
+                    .volumeNameKey,
+                    .volumeIsRemovableKey,
+                    .volumeIsEjectableKey,
+                    .volumeIsInternalKey,
+                ]
+                guard let values = try? url.resourceValues(forKeys: keys) else { return nil }
 
-            let isEjectable = values.volumeIsEjectable ?? false
-            let isRemovable = values.volumeIsRemovable ?? false
-            let isInternal = values.volumeIsInternal ?? true
-            let isLocal = values.volumeIsLocal ?? true
+                let isEjectable = values.volumeIsEjectable ?? false
+                let isRemovable = values.volumeIsRemovable ?? false
+                let isInternal  = values.volumeIsInternal  ?? true
 
-            guard url.path != "/" else { return nil }
-            guard !url.path.hasPrefix("/System/") else { return nil }
-            guard isEjectable || isRemovable || !isInternal || !isLocal else { return nil }
+                guard isEjectable || isRemovable || !isInternal else { return nil }
 
-            let deviceType = classifyDevice(
-                typeName: values.volumeTypeName ?? "",
-                isLocal: isLocal,
-                isRemovable: isRemovable,
-                isEjectable: isEjectable,
-                isInternal: isInternal
-            )
-
-            return MountedVolume(
-                name: values.volumeName ?? url.lastPathComponent,
-                path: url.path,
-                deviceType: deviceType,
-                volumeURL: url
-            )
+                let deviceType = classifyDevice(
+                    typeName:    mount.fsType,
+                    isLocal:     true,
+                    isRemovable: isRemovable,
+                    isEjectable: isEjectable,
+                    isInternal:  isInternal
+                )
+                return MountedVolume(
+                    name:       values.volumeName ?? url.lastPathComponent,
+                    path:       mount.mountPoint,
+                    deviceType: deviceType,
+                    volumeURL:  url
+                )
+            } else {
+                // Network volume — do not query the filesystem to avoid blocking
+                // when the volume is mounted but no longer reachable.
+                return MountedVolume(
+                    name:       url.lastPathComponent,
+                    path:       mount.mountPoint,
+                    deviceType: .network,
+                    volumeURL:  url
+                )
+            }
         }
         .sorted { ($0.deviceType, $0.name.lowercased()) < ($1.deviceType, $1.name.lowercased()) }
     }
