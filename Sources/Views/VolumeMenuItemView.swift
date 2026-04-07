@@ -182,9 +182,10 @@ final class VolumeMenuItemView: NSView {
     private var isHovered = false
     private var trackingArea: NSTrackingArea?
 
-    init(icon: NSImage, name: String, volumeURL: URL, deviceType: DeviceType, capacity: VolumeCapacity? = nil, indented: Bool = false, onEject: @escaping () -> Void) {
+    init(icon: NSImage, name: String, volumeURL: URL, deviceType: DeviceType, capacity: VolumeCapacity? = nil, operation: DriveOperation? = nil, indented: Bool = false, onEject: @escaping () -> Void) {
         self.volumeURL = volumeURL
         self.deviceType = deviceType
+        let isEjecting = operation == .ejecting
 
         let ud = UserDefaults.standard
         let showBar   = capacity != nil && ud.bool(forKey: "showCapacityLine")
@@ -207,6 +208,13 @@ final class VolumeMenuItemView: NSView {
         ejectButton = EjectButtonView(frame: .zero)
         ejectButton.onEject = onEject
         ejectButton.isHidden = true
+
+        let spinner = NSProgressIndicator()
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isIndeterminate = true
+        spinner.isHidden = !isEjecting
+        if isEjecting { spinner.startAnimation(nil) }
 
         // Height grows downward from the base 28 pt icon row.
         var totalHeight: CGFloat = 28
@@ -232,7 +240,7 @@ final class VolumeMenuItemView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: 280, height: totalHeight))
         autoresizingMask = .width
 
-        for v in ([iconView, nameLabel, ejectButton, barView, statsTF] as [NSView?]).compactMap({ $0 }) {
+        for v in ([iconView, nameLabel, ejectButton, spinner, barView, statsTF] as [NSView?]).compactMap({ $0 }) {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
@@ -256,6 +264,9 @@ final class VolumeMenuItemView: NSView {
             ejectButton.topAnchor.constraint(equalTo: topAnchor, constant: 4),
             ejectButton.widthAnchor.constraint(equalToConstant: 20),
             ejectButton.heightAnchor.constraint(equalToConstant: 20),
+
+            spinner.centerXAnchor.constraint(equalTo: ejectButton.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: ejectButton.centerYAnchor),
         ]
 
         if let bar = barView {

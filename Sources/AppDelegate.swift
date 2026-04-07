@@ -1,6 +1,10 @@
 import Cocoa
 import SwiftUI
 
+enum DriveOperation {
+    case connecting, ejecting
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
@@ -9,6 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var preferencesWindow: NSWindow?
     private let preferencesViewModel = PreferencesViewModel()
+
+    /// Keyed by drive UUID (connecting) or volume URL string (ejecting).
+    private var activeOperations: [AnyHashable: DriveOperation] = [:]
 
     // MARK: - App Lifecycle
 
@@ -161,6 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             connected: mounted,
             mountPoint: driveManager.mountPoint(for: drive),
             availability: availability[drive.id],
+            operation: activeOperations[drive.id],
             indented: indented
         ) { [weak self] in
             self?.connectDrive(drive)
@@ -249,6 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             volumeURL: volume.volumeURL,
             deviceType: volume.deviceType,
             capacity: capacity,
+            operation: activeOperations[volume.volumeURL.absoluteString],
             indented: indented
         ) { [weak self] in
             self?.ejectVolume(named: volume.name, at: volume.volumeURL)
@@ -326,15 +335,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Actions
 
     private func connectDrive(_ drive: NetworkDrive) {
-        driveManager.mount(drive) { _ in }
+        activeOperations[drive.id] = .connecting
+        // Auto-clear stuck connecting state after 30 s.
+        let driveID = drive.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
+            guard let self, self.activeOperations[driveID] == .connecting else { return }
+            self.activeOperations.removeValue(forKey: driveID)
+        }
+        driveManager.mount(drive) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.activeOperations.removeValue(forKey: drive.id)
+            }
+        }
     }
 
     private func ejectVolume(named volumeName: String, at url: URL) {
+        activeOperations[url.absoluteString] = .ejecting
         FileManager.default.unmountVolume(
             at: url,
             options: [.allPartitionsAndEjectDisk]
-        ) { error in
+        ) { [weak self] error in
             DispatchQueue.main.async {
+                guard let self else { return }
+                self.activeOperations.removeValue(forKey: url.absoluteString)
                 if let error {
                     self.notificationManager.showEjectFailed(volumeName, details: error.localizedDescription)
                 } else {

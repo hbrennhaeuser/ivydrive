@@ -97,9 +97,11 @@ final class NetworkGroupHeaderView: NSView {
 
 final class NetworkDriveMenuItemView: NSView {
     private let bubbleView: StatusBubbleView
+    private let spinner: NSProgressIndicator
     private let nameLabel: NSTextField
     private let drive: NetworkDrive
     private let isConnected: Bool
+    private let isInProgress: Bool
     private let mountPoint: URL?
     private let availability: DriveAvailabilityResult?
     private let onAction: () -> Void
@@ -111,11 +113,13 @@ final class NetworkDriveMenuItemView: NSView {
         connected: Bool,
         mountPoint: URL?,
         availability: DriveAvailabilityResult? = nil,
+        operation: DriveOperation? = nil,
         indented: Bool = false,
         onAction: @escaping () -> Void
     ) {
         self.drive = drive
         self.isConnected = connected
+        self.isInProgress = operation == .connecting
         self.mountPoint = mountPoint
         self.availability = availability
         self.onAction = onAction
@@ -138,6 +142,13 @@ final class NetworkDriveMenuItemView: NSView {
         }
 
         bubbleView = StatusBubbleView(fillColor: fillColor)
+        bubbleView.alphaValue = operation == .connecting ? 0 : 1
+
+        spinner = NSProgressIndicator()
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isIndeterminate = true
+        spinner.isHidden = operation != .connecting
 
         nameLabel = NSTextField(labelWithString: drive.displayName)
         nameLabel.font = .menuFont(ofSize: 0)
@@ -149,10 +160,12 @@ final class NetworkDriveMenuItemView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: 280, height: 28))
         autoresizingMask = .width
 
-        for v in [bubbleView, nameLabel] as [NSView] {
+        for v in [bubbleView, spinner, nameLabel] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
+
+        if operation == .connecting { spinner.startAnimation(nil) }
 
         nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         nameLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -168,6 +181,9 @@ final class NetworkDriveMenuItemView: NSView {
             bubbleView.centerYAnchor.constraint(equalTo: centerYAnchor),
             bubbleView.widthAnchor.constraint(equalToConstant: 18),
             bubbleView.heightAnchor.constraint(equalToConstant: 18),
+
+            spinner.centerXAnchor.constraint(equalTo: bubbleView.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: bubbleView.centerYAnchor),
         ])
     }
 
@@ -218,7 +234,7 @@ final class NetworkDriveMenuItemView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard !isConnected else { return }
+        guard !isConnected, !isInProgress else { return }
         enclosingMenuItem?.menu?.cancelTracking()
         onAction()
     }
