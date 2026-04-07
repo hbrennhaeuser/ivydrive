@@ -8,6 +8,9 @@ struct DriveFormView: View {
 
     @State private var url = ""
     @State private var label = ""
+    @State private var checkHostReachability = false
+    @State private var checkDNSResolution = false
+    @State private var checkPortAvailability = false
 
     private var isEditing: Bool { drive != nil }
 
@@ -31,6 +34,17 @@ struct DriveFormView: View {
 
             }
 
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Availability Checks")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Check host reachability (ping)", isOn: $checkHostReachability)
+                Toggle("Check DNS resolution", isOn: $checkDNSResolution)
+                Toggle("Check port availability", isOn: $checkPortAvailability)
+            }
+
             HStack {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
@@ -49,6 +63,9 @@ struct DriveFormView: View {
         guard let drive else { return }
         url = drive.url
         label = drive.label ?? ""
+        checkHostReachability = drive.checkHostReachability
+        checkDNSResolution = drive.checkDNSResolution
+        checkPortAvailability = drive.checkPortAvailability
     }
 
     private func save() {
@@ -58,13 +75,19 @@ struct DriveFormView: View {
         if var existing = drive {
             existing.url = trimmedURL
             existing.label = trimmedLabel.isEmpty ? nil : trimmedLabel
+            existing.checkHostReachability = checkHostReachability
+            existing.checkDNSResolution = checkDNSResolution
+            existing.checkPortAvailability = checkPortAvailability
             manager.update(existing)
         } else {
             let newDrive = NetworkDrive(
                 id: UUID(),
                 url: trimmedURL,
                 label: trimmedLabel.isEmpty ? nil : trimmedLabel,
-                autoConnect: false
+                autoConnect: false,
+                checkHostReachability: checkHostReachability,
+                checkDNSResolution: checkDNSResolution,
+                checkPortAvailability: checkPortAvailability
             )
             manager.add(newDrive)
         }
