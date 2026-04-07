@@ -55,22 +55,38 @@ struct DriveFormView: View {
                               prompt: Text("Optional — defaults to host/share"))
                 }
 
-                Section {
-                    DisclosureGroup("Advanced", isExpanded: $advancedExpanded) {
-                        Text("Autoconnect")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                        Text("No autoconnect settings yet.")
-                            .foregroundStyle(.tertiary)
-                            .italic()
-                        Text("Availability Checks")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                        Toggle("Check host reachability", isOn: $checkHostReachability)
-                        Toggle("Check DNS resolution", isOn: $checkDNSResolution)
-                        Toggle("Check port availability", isOn: $checkPortAvailability)
+                Section(
+                    content: {
+                        if advancedExpanded {
+                            Text("Autoconnect")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                            Text("Autoconnect coming soon.")
+                                .foregroundStyle(.tertiary)
+                                .italic()
+                            Text("Availability Checks")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                            Toggle("Check host reachability", isOn: $checkHostReachability)
+                            Toggle("Check DNS resolution", isOn: $checkDNSResolution)
+                            Toggle("Check port availability", isOn: $checkPortAvailability)
+                        }
+                    },
+                    header: {
+                        Button {
+                            withAnimation { advancedExpanded.toggle() }
+                        } label: {
+                            HStack {
+                                Text("Advanced")
+                                Spacer()
+                                Image(systemName: advancedExpanded ? "chevron.down" : "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
                     }
-                }
+                )
             }
 
             HStack {
