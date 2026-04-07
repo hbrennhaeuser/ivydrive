@@ -64,6 +64,10 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
         center.add(request) { [weak self] error in
             guard let self, let error else { return }
+            // UNErrorCodeNotificationsNotAllowed (1) means permission was denied —
+            // not an actionable error, so don't bother the user with an alert.
+            let nsError = error as NSError
+            if nsError.domain == UNErrorDomain && nsError.code == 1 { return }
             DispatchQueue.main.async {
                 self.showDeliveryFailedAlert(details: error.localizedDescription)
             }
