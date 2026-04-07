@@ -1,10 +1,34 @@
 import Foundation
 
+enum DriveType: String, Codable, CaseIterable {
+    case smb, nfs, ftp, afp, other
+
+    var displayName: String {
+        switch self {
+        case .smb:   return "SMB"
+        case .nfs:   return "NFS"
+        case .ftp:   return "FTP"
+        case .afp:   return "AFP (Apple)"
+        case .other: return "Other / URI"
+        }
+    }
+
+    static func infer(from url: String) -> DriveType {
+        switch URL(string: url)?.scheme?.lowercased() {
+        case "smb":  return .smb
+        case "nfs":  return .nfs
+        case "ftp":  return .ftp
+        case "afp":  return .afp
+        default:     return .other
+        }
+    }
+}
+
 struct NetworkDrive: Codable, Identifiable, Hashable {
     var id: UUID
     var url: String
+    var driveType: DriveType
     var label: String?
-    var autoConnect: Bool
 
     var checkHostReachability: Bool
     var checkDNSResolution: Bool
@@ -16,20 +40,21 @@ struct NetworkDrive: Codable, Identifiable, Hashable {
         id = try c.decode(UUID.self, forKey: .id)
         url = try c.decode(String.self, forKey: .url)
         label = try c.decodeIfPresent(String.self, forKey: .label)
-        autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? false
         checkHostReachability = try c.decodeIfPresent(Bool.self, forKey: .checkHostReachability) ?? false
         checkDNSResolution = try c.decodeIfPresent(Bool.self, forKey: .checkDNSResolution) ?? false
         checkPortAvailability = try c.decodeIfPresent(Bool.self, forKey: .checkPortAvailability) ?? false
+        // Infers from URL scheme for drives saved before this field existed.
+        driveType = try c.decodeIfPresent(DriveType.self, forKey: .driveType) ?? DriveType.infer(from: url)
     }
 
-    init(id: UUID, url: String, label: String?, autoConnect: Bool,
+    init(id: UUID, url: String, driveType: DriveType = .other, label: String?,
          checkHostReachability: Bool = false,
          checkDNSResolution: Bool = false,
          checkPortAvailability: Bool = false) {
         self.id = id
         self.url = url
+        self.driveType = driveType
         self.label = label
-        self.autoConnect = autoConnect
         self.checkHostReachability = checkHostReachability
         self.checkDNSResolution = checkDNSResolution
         self.checkPortAvailability = checkPortAvailability
