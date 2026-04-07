@@ -55,7 +55,6 @@ final class EjectButtonView: NSView {
     override func mouseUp(with event: NSEvent) {
         let local = convert(event.locationInWindow, from: nil)
         guard bounds.contains(local) else { return }
-        enclosingMenuItem?.menu?.cancelTracking()
         onEject?()
     }
 
@@ -145,14 +144,19 @@ final class VolumeGroupHeaderView: NSView {
         var c: [NSLayoutConstraint] = [
             heightAnchor.constraint(equalToConstant: totalHeight),
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
         ]
+
+        if barView == nil {
+            c.append(label.centerYAnchor.constraint(equalTo: centerYAnchor))
+        } else {
+            c.append(label.topAnchor.constraint(equalTo: topAnchor, constant: 4))
+        }
 
         if let bar = barView {
             c += [
                 bar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-                bar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+                bar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
                 bar.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 2),
                 bar.heightAnchor.constraint(equalToConstant: 4),
             ]
@@ -162,7 +166,7 @@ final class VolumeGroupHeaderView: NSView {
             let anchor: NSView = barView ?? label
             c += [
                 stats.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-                stats.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+                stats.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
                 stats.topAnchor.constraint(equalTo: anchor.bottomAnchor, constant: 2),
             ]
         }
@@ -176,6 +180,7 @@ final class VolumeGroupHeaderView: NSView {
 final class VolumeMenuItemView: NSView {
     private let nameLabel: NSTextField
     private let ejectButton: EjectButtonView
+    private let spinner: NSProgressIndicator
     private let iconView: NSImageView
     private let volumeURL: URL
     private let deviceType: DeviceType
@@ -206,10 +211,9 @@ final class VolumeMenuItemView: NSView {
         nameLabel.drawsBackground = false
 
         ejectButton = EjectButtonView(frame: .zero)
-        ejectButton.onEject = onEject
         ejectButton.isHidden = true
 
-        let spinner = NSProgressIndicator()
+        spinner = NSProgressIndicator()
         spinner.style = .spinning
         spinner.controlSize = .small
         spinner.isIndeterminate = true
@@ -288,9 +292,20 @@ final class VolumeMenuItemView: NSView {
         }
 
         NSLayoutConstraint.activate(c)
+
+        ejectButton.onEject = { [weak self] in
+            self?.showEjecting()
+            onEject()
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    private func showEjecting() {
+        ejectButton.isHidden = true
+        spinner.isHidden = false
+        spinner.startAnimation(nil)
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         guard isHovered else { return }
@@ -335,6 +350,8 @@ final class VolumeMenuItemView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        // Only eject button handles clicks; ignore clicks elsewhere on the row
+        guard UserDefaults.standard.bool(forKey: "clickVolumeToOpenInFinder") else { return }
+        NSWorkspace.shared.open(volumeURL)
+        enclosingMenuItem?.menu?.cancelTracking()
     }
 }
