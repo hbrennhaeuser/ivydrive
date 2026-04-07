@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import ServiceManagement
 
 enum DriveOperation {
     case connecting, ejecting
@@ -16,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Keyed by drive UUID (connecting) or volume URL string (ejecting).
     private var activeOperations: [AnyHashable: DriveOperation] = [:]
+    private var isMenuOpen = false
 
     // MARK: - App Lifecycle
 
@@ -29,6 +31,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "hideConnectedFromAvailable": true,
             "showHoverInfo":              false,
             "hideLocalDrives":            false,
+            "clickGroupToConnectAll":       true,
+            "clickVolumeToOpenInFinder":    true,
+            "didAskAboutLoginItem":         false,
         ])
         notificationManager.configure()
         setupMainMenu()
@@ -36,6 +41,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             self?.notificationManager.requestAuthorizationIfNeeded()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.promptForLoginItemIfNeeded()
+        }
+    }
+
+    private func promptForLoginItemIfNeeded() {
+        let ud = UserDefaults.standard
+        guard !ud.bool(forKey: "didAskAboutLoginItem") else { return }
+        guard SMAppService.mainApp.status == .notRegistered else {
+            // Already registered (e.g. user enabled it manually); just mark asked.
+            ud.set(true, forKey: "didAskAboutLoginItem")
+            return
+        }
+        ud.set(true, forKey: "didAskAboutLoginItem")
+
+        let alert = NSAlert()
+        alert.messageText = "Start MenuBarFS at Login?"
+        alert.informativeText = "Would you like MenuBarFS to launch automatically when you log in? You can change this later in Preferences → Maintenance."
+        alert.addButton(withTitle: "Enable")
+        alert.addButton(withTitle: "Not Now")
+        alert.alertStyle = .informational
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            try? SMAppService.mainApp.register()
         }
     }
 
@@ -67,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func setupStatusItem() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
             button.image = NSImage(
@@ -83,23 +115,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - NSMenuDelegate
 
     func menuWillOpen(_ menu: NSMenu) {
+        isMenuOpen = true
+        rebuildMenu()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        isMenuOpen = false
+        DriveInfoPanel.shared.hide()
+    }
+
+    private func rebuildMenu() {
         menu.removeAllItems()
         let unmounted = driveManager.drives.filter { !driveManager.isMounted($0) }
-        let availability: [UUID: DriveAvailabilityResult]
-        if unmounted.isEmpty {
-            availability = [:]
-        } else {
-            availability = DriveAvailabilityChecker.shared.checkAll(unmounted)
-        }
+        let availability = unmounted.isEmpty ? [:] : DriveAvailabilityChecker.shared.checkAll(unmounted)
         buildNetworkDrivesSection(in: menu, availability: availability)
         menu.addItem(.separator())
         buildEjectableVolumesSection(in: menu)
         menu.addItem(.separator())
         buildAppSection(in: menu)
-    }
-
-    func menuDidClose(_ menu: NSMenu) {
-        DriveInfoPanel.shared.hide()
     }
 
     // MARK: - Menu Sections
@@ -159,21 +192,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
 
             // Multi-drive group: header (clickable when any sub-entry is unconnected) + indented sub-entries
-            let connectAll: (() -> Void)? = unconnectedInGroup.isEmpty ? nil : { [weak self] in
+            let connectAllEnabled = ud.bool(forKey: "clickGroupToConnectAll")
+            let connectAll: (() -> Void)? = (connectAllEnabled && !unconnectedInGroup.isEmpty) ? { [weak self] in
                 guard let self else { return }
                 for drive in unconnectedInGroup {
                     self.connectDrive(drive)
                 }
-            }
+            } : nil
             let headerItem = NSMenuItem()
             headerItem.view = NetworkGroupHeaderView(
                 host: URL(string: key)?.host ?? key,
-                onConnect: connectAll
+                onConnect: connectAll,
+                showAccentBar: true
             )
             menu.addItem(headerItem)
 
             for drive in entriesToShow {
-                addNetworkDriveItem(drive, mounted: connectedIDs.contains(drive.id), availability: availability, to: menu, indented: true)
+                addNetworkDriveItem(drive, mounted: connectedIDs.contains(drive.id), availability: availability, to: menu, indented: true, accented: true)
             }
         }
 
@@ -189,7 +224,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mounted: Bool,
         availability: [UUID: DriveAvailabilityResult],
         to menu: NSMenu,
-        indented: Bool
+        indented: Bool,
+        accented: Bool = false
     ) {
         let item = NSMenuItem()
         let view = NetworkDriveMenuItemView(
@@ -198,7 +234,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             mountPoint: driveManager.mountPoint(for: drive),
             availability: availability[drive.id],
             operation: activeOperations[drive.id],
-            indented: indented
+            indented: indented,
+            showAccentBar: accented
         ) { [weak self] in
             self?.connectDrive(drive)
         }
@@ -346,14 +383,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         prefsItem.target = self
         menu.addItem(prefsItem)
 
-        let aboutItem = NSMenuItem(
-            title: "About MenuBarFS",
-            action: #selector(showAbout),
-            keyEquivalent: ""
-        )
-        aboutItem.target = self
-        menu.addItem(aboutItem)
-
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
@@ -369,15 +398,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func connectDrive(_ drive: NetworkDrive) {
         activeOperations[drive.id] = .connecting
-        // Auto-clear stuck connecting state after 30 s.
         let driveID = drive.id
+        // Auto-clear stuck connecting state after 30 s.
         DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
             guard let self, self.activeOperations[driveID] == .connecting else { return }
             self.activeOperations.removeValue(forKey: driveID)
+            if self.isMenuOpen { self.rebuildMenu() }
         }
         driveManager.mount(drive) { [weak self] _ in
             DispatchQueue.main.async {
-                self?.activeOperations.removeValue(forKey: drive.id)
+                guard let self else { return }
+                self.activeOperations.removeValue(forKey: drive.id)
+                if self.isMenuOpen { self.rebuildMenu() }
             }
         }
     }
@@ -391,6 +423,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.activeOperations.removeValue(forKey: url.absoluteString)
+                if self.isMenuOpen { self.rebuildMenu() }
                 if let error {
                     self.notificationManager.showEjectFailed(volumeName, details: error.localizedDescription)
                 } else {
@@ -405,7 +438,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showAbout() {
-        openPreferences(tab: 2)
+        openPreferences(tab: 4)
     }
 
     private func openPreferences(tab: Int) {
