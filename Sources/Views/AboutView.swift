@@ -28,7 +28,7 @@ struct AboutView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 250)
 
-            Text("Licensed under GPLv3")
+            Text("© 2026 HBrennhaeuser. All rights reserved.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
