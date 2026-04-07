@@ -1,5 +1,26 @@
-build/
+# macOS
 .DS_Store
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# Swift Package Manager
+.build/
+Package.resolved
+Packages/
+
+# Build output
+build/
 *.swp
 *.o
 *.d
+
+# Local notes
+notes.md
+todo.md
+
