@@ -13,10 +13,15 @@ FRAMEWORKS := -framework Cocoa \
               -framework DiskArbitration \
               -framework NetFS \
 			  -framework Security \
-			  -framework UserNotifications
+			  -framework UserNotifications \
+			  -framework SystemConfiguration \
+			  -framework Network
 
 BINARY := $(MACOS_DIR)/$(APP_NAME)
 PLIST := $(CONTENTS)/Info.plist
+VERSION := $(shell /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Resources/Info.plist 2>/dev/null || echo '0.0.0')
+DMG := $(BUILD_DIR)/$(APP_NAME)-$(VERSION).dmg
+DMG_STAGING := $(BUILD_DIR)/.dmg-staging
 
 # Default goal
 all: $(BINARY) $(PLIST)
@@ -31,8 +36,19 @@ $(PLIST): Resources/Info.plist
 	@cp "$<" "$@"
 	@codesign --sign - --force --deep "$(APP_BUNDLE)"
 
+dmg: all
+	@rm -rf "$(DMG_STAGING)" "$(DMG)"
+	@mkdir -p "$(DMG_STAGING)"
+	@cp -R "$(APP_BUNDLE)" "$(DMG_STAGING)/"
+	@hdiutil create -volname "$(APP_NAME)" \
+		-srcfolder "$(DMG_STAGING)" \
+		-ov -format UDZO \
+		-o "$(DMG)"
+	@rm -rf "$(DMG_STAGING)"
+	@echo "Created $(DMG)"
+
 # Phony targets
-.PHONY: all clean run debug install
+.PHONY: all clean run debug install dmg
 
 clean:
 	rm -rf "$(BUILD_DIR)"
