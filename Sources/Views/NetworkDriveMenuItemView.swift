@@ -1,42 +1,15 @@
 import Cocoa
 
-// Custom pill view draws its own background/border/text to avoid NSTextField's
-// rectangular background clipping and vertical centering limitations.
-private final class ConnectPillView: NSView {
-    override func draw(_ dirtyRect: NSRect) {
-        let inset = bounds.insetBy(dx: 0.5, dy: 0.5)
-        let path = NSBezierPath(roundedRect: inset, xRadius: 9, yRadius: 9)
-
-        NSColor.unemphasizedSelectedContentBackgroundColor.setFill()
-        path.fill()
-
-        NSColor.separatorColor.setStroke()
-        path.lineWidth = 1
-        path.stroke()
-
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: .medium),
-            .foregroundColor: NSColor.labelColor,
-        ]
-        let str = "Connect" as NSString
-        let sz = str.size(withAttributes: attrs)
-        let pt = NSPoint(
-            x: round((bounds.width - sz.width) / 2),
-            y: round((bounds.height - sz.height) / 2)
-        )
-        str.draw(at: pt, withAttributes: attrs)
-    }
-}
-
 final class NetworkDriveMenuItemView: NSView {
     private let dotView: NSView
     private let nameLabel: NSTextField
-    private let connectPill: ConnectPillView
+    private let connectIconView: NSImageView
     private let drive: NetworkDrive
     private let isConnected: Bool
     private let mountPoint: URL?
     private let availability: DriveAvailabilityResult?
     private let onAction: () -> Void
+    private var isHovered = false
     private var trackingArea: NSTrackingArea?
 
     init(
@@ -73,13 +46,19 @@ final class NetworkDriveMenuItemView: NSView {
         nameLabel.isBordered = false
         nameLabel.drawsBackground = false
 
-        connectPill = ConnectPillView(frame: .zero)
-        connectPill.isHidden = true
+        let iconConfig = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
+        let iconImage = connected ? nil : NSImage(
+            systemSymbolName: "cable.connector",
+            accessibilityDescription: "Connect"
+        )?.withSymbolConfiguration(iconConfig)
+        connectIconView = NSImageView(image: iconImage ?? NSImage())
+        connectIconView.contentTintColor = .secondaryLabelColor
+        connectIconView.isHidden = true
 
-        super.init(frame: NSRect(x: 0, y: 0, width: 250, height: 22))
+        super.init(frame: NSRect(x: 0, y: 0, width: 280, height: 28))
         autoresizingMask = .width
 
-        for v in [dotView, nameLabel, connectPill] as [NSView] {
+        for v in [dotView, nameLabel, connectIconView] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
@@ -88,25 +67,34 @@ final class NetworkDriveMenuItemView: NSView {
         nameLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 22),
+            heightAnchor.constraint(equalToConstant: 28),
 
-            dotView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 23),
+            // Name anchored to the left edge (mirrors macOS Wi-Fi menu layout)
+            nameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: connectIconView.leadingAnchor, constant: -8),
+            nameLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+
+            // Connect icon sits to the left of the dot (only shown on hover)
+            connectIconView.trailingAnchor.constraint(equalTo: dotView.leadingAnchor, constant: -6),
+            connectIconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            connectIconView.widthAnchor.constraint(equalToConstant: 16),
+            connectIconView.heightAnchor.constraint(equalToConstant: 16),
+
+            // Status dot on the right (mirrors lock icon position in Wi-Fi menu)
+            dotView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
             dotView.centerYAnchor.constraint(equalTo: centerYAnchor),
             dotView.widthAnchor.constraint(equalToConstant: 8),
             dotView.heightAnchor.constraint(equalToConstant: 8),
-
-            nameLabel.leadingAnchor.constraint(equalTo: dotView.trailingAnchor, constant: 10),
-            nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
-            nameLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-
-            connectPill.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            connectPill.centerYAnchor.constraint(equalTo: centerYAnchor),
-            connectPill.widthAnchor.constraint(equalToConstant: 62),
-            connectPill.heightAnchor.constraint(equalToConstant: 18),
         ])
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard isHovered else { return }
+        NSColor.labelColor.withAlphaComponent(0.08).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 2), xRadius: 5, yRadius: 5).fill()
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -122,25 +110,34 @@ final class NetworkDriveMenuItemView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        if !isConnected { connectPill.isHidden = false }
-        let rows: [(label: String, value: String)]
+        isHovered = true
+        needsDisplay = true
+        if !isConnected { connectIconView.isHidden = false }
         if isConnected, let mp = mountPoint {
-            rows = DriveInfoPanel.rowsForMountedVolume(at: mp)
+            // Fetch resource values on a background thread — this call can block
+            // when a network volume is mounted but the network is unreachable.
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self else { return }
+                let rows = DriveInfoPanel.rowsForMountedVolume(at: mp)
+                DispatchQueue.main.async {
+                    DriveInfoPanel.shared.show(rows: rows, anchoredTo: self)
+                }
+            }
         } else {
-            rows = DriveInfoPanel.rowsForUnmountedDrive(drive, availability: availability)
+            let rows = DriveInfoPanel.rowsForUnmountedDrive(drive, availability: availability)
+            DriveInfoPanel.shared.show(rows: rows, anchoredTo: self)
         }
-        DriveInfoPanel.shared.show(rows: rows, anchoredTo: self)
     }
 
     override func mouseExited(with event: NSEvent) {
-        connectPill.isHidden = true
+        isHovered = false
+        needsDisplay = true
+        connectIconView.isHidden = true
         DriveInfoPanel.shared.hide()
     }
 
     override func mouseUp(with event: NSEvent) {
         guard !isConnected else { return }
-        let local = convert(event.locationInWindow, from: nil)
-        guard connectPill.frame.insetBy(dx: -4, dy: -4).contains(local) else { return }
         enclosingMenuItem?.menu?.cancelTracking()
         onAction()
     }

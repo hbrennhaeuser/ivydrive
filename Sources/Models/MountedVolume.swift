@@ -19,3 +19,11 @@ struct MountedVolume: Identifiable {
     let deviceType: DeviceType
     let volumeURL: URL
 }
+
+struct VolumeCapacity {
+    let usedBytes: Int
+    let totalBytes: Int
+    let isReadOnly: Bool
+
+    var fraction: Double { totalBytes > 0 ? Double(usedBytes) / Double(totalBytes) : 0 }
+}

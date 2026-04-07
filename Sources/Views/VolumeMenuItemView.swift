@@ -61,7 +61,7 @@ final class EjectButtonView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         if isHovered {
-            NSColor.controlAccentColor.withAlphaComponent(0.15).setFill()
+            NSColor.labelColor.withAlphaComponent(0.10).setFill()
             let circle = NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1))
             circle.fill()
             imageView.contentTintColor = .labelColor
@@ -85,7 +85,7 @@ private final class CapacityBarView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let bg = NSBezierPath(roundedRect: bounds, xRadius: 2, yRadius: 2)
-        NSColor.separatorColor.withAlphaComponent(0.3).setFill()
+        NSColor.labelColor.withAlphaComponent(0.18).setFill()
         bg.fill()
 
         let fillWidth = bounds.width * fraction
@@ -103,34 +103,21 @@ final class VolumeMenuItemView: NSView {
     private let iconView: NSImageView
     private let volumeURL: URL
     private let deviceType: DeviceType
+    private var isHovered = false
     private var trackingArea: NSTrackingArea?
 
-    init(icon: NSImage, name: String, volumeURL: URL, deviceType: DeviceType, onEject: @escaping () -> Void) {
+    init(icon: NSImage, name: String, volumeURL: URL, deviceType: DeviceType, capacity: VolumeCapacity? = nil, onEject: @escaping () -> Void) {
         self.volumeURL = volumeURL
         self.deviceType = deviceType
 
         let ud = UserDefaults.standard
-        let isReadOnly = (try? volumeURL.resourceValues(forKeys: [.volumeIsReadOnlyKey]).volumeIsReadOnly) == true
-
-        var capacityRelevant = true
-        if isReadOnly && ud.bool(forKey: "hideCapacityForReadOnly") { capacityRelevant = false }
-
-        let showBar   = capacityRelevant && ud.bool(forKey: "showCapacityLine")
+        let showBar   = capacity != nil && ud.bool(forKey: "showCapacityLine")
         let showStats = showBar && ud.bool(forKey: "showCapacityStats")
 
-        var usedBytes = 0
-        var totalBytes = 0
-        if showBar {
-            let keys: Set<URLResourceKey> = [.volumeTotalCapacityKey, .volumeAvailableCapacityKey]
-            if let vals = try? volumeURL.resourceValues(forKeys: keys),
-               let total = vals.volumeTotalCapacity,
-               let free  = vals.volumeAvailableCapacity {
-                usedBytes  = total - free
-                totalBytes = total
-            }
-        }
-        let hasCap   = totalBytes > 0
-        let fraction = hasCap ? Double(usedBytes) / Double(totalBytes) : 0.0
+        let hasCap   = showBar && capacity != nil
+        let fraction = hasCap ? capacity!.fraction : 0.0
+        let usedBytes  = capacity?.usedBytes  ?? 0
+        let totalBytes = capacity?.totalBytes ?? 0
 
         iconView = NSImageView(image: icon)
 
@@ -143,9 +130,10 @@ final class VolumeMenuItemView: NSView {
 
         ejectButton = EjectButtonView(frame: .zero)
         ejectButton.onEject = onEject
+        ejectButton.isHidden = true
 
-        // Height grows downward from the base 22 pt icon row.
-        var totalHeight: CGFloat = 22
+        // Height grows downward from the base 28 pt icon row.
+        var totalHeight: CGFloat = 28
         let barView: CapacityBarView? = (showBar && hasCap) ? CapacityBarView(fraction: fraction) : nil
         if barView != nil { totalHeight += 8 }   // 2 gap + 4 bar + 2 gap
 
@@ -165,7 +153,7 @@ final class VolumeMenuItemView: NSView {
             statsTF = nil
         }
 
-        super.init(frame: NSRect(x: 0, y: 0, width: 250, height: totalHeight))
+        super.init(frame: NSRect(x: 0, y: 0, width: 280, height: totalHeight))
         autoresizingMask = .width
 
         for v in ([iconView, nameLabel, ejectButton, barView, statsTF] as [NSView?]).compactMap({ $0 }) {
@@ -180,7 +168,7 @@ final class VolumeMenuItemView: NSView {
             heightAnchor.constraint(equalToConstant: totalHeight),
 
             iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 19),
-            iconView.topAnchor.constraint(equalTo: topAnchor, constant: 3),
+            iconView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             iconView.widthAnchor.constraint(equalToConstant: 16),
             iconView.heightAnchor.constraint(equalToConstant: 16),
 
@@ -189,7 +177,7 @@ final class VolumeMenuItemView: NSView {
 
             ejectButton.leadingAnchor.constraint(greaterThanOrEqualTo: nameLabel.trailingAnchor, constant: 8),
             ejectButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            ejectButton.topAnchor.constraint(equalTo: topAnchor, constant: 1),
+            ejectButton.topAnchor.constraint(equalTo: topAnchor, constant: 4),
             ejectButton.widthAnchor.constraint(equalToConstant: 20),
             ejectButton.heightAnchor.constraint(equalToConstant: 20),
         ]
@@ -217,6 +205,12 @@ final class VolumeMenuItemView: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    override func draw(_ dirtyRect: NSRect) {
+        guard isHovered else { return }
+        NSColor.labelColor.withAlphaComponent(0.08).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 2), xRadius: 5, yRadius: 5).fill()
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let existing = trackingArea { removeTrackingArea(existing) }
@@ -231,11 +225,24 @@ final class VolumeMenuItemView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        let rows = DriveInfoPanel.rowsForMountedVolume(at: volumeURL, deviceType: deviceType)
-        DriveInfoPanel.shared.show(rows: rows, anchoredTo: self)
+        isHovered = true
+        needsDisplay = true
+        ejectButton.isHidden = false
+        // Fetch resource values on a background thread — this call can block
+        // when a network volume is mounted but the network is unreachable.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let rows = DriveInfoPanel.rowsForMountedVolume(at: self.volumeURL, deviceType: self.deviceType)
+            DispatchQueue.main.async {
+                DriveInfoPanel.shared.show(rows: rows, anchoredTo: self)
+            }
+        }
     }
 
     override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        needsDisplay = true
+        ejectButton.isHidden = true
         DriveInfoPanel.shared.hide()
     }
 

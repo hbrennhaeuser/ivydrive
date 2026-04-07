@@ -101,13 +101,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
+        let capacities = prefetchCapacities(for: volumes)
+
         for volume in volumes {
             let item = NSMenuItem()
 
-            let icon = NSWorkspace.shared.icon(forFile: volume.path)
+            let icon: NSImage
+            if volume.deviceType == .network {
+                // Avoid icon(forFile:) on network volume paths — it can block when
+                // the volume is mounted but the network is unreachable.
+                icon = NSImage(
+                    systemSymbolName: "externaldrive.connected.to.line.below",
+                    accessibilityDescription: "Network Drive"
+                ) ?? NSImage()
+            } else {
+                icon = NSWorkspace.shared.icon(forFile: volume.path)
+            }
             icon.size = NSSize(width: 16, height: 16)
 
-            let view = VolumeMenuItemView(icon: icon, name: volume.name, volumeURL: volume.volumeURL, deviceType: volume.deviceType) { [weak self] in
+            let view = VolumeMenuItemView(icon: icon, name: volume.name, volumeURL: volume.volumeURL, deviceType: volume.deviceType, capacity: capacities[volume.volumeURL]) { [weak self] in
                 self?.ejectVolume(named: volume.name, at: volume.volumeURL)
             }
             item.view = view
@@ -115,6 +127,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             menu.addItem(item)
         }
+    }
+
+    /// Fetches capacity for all volumes in parallel. Waits at most 200 ms for the
+    /// whole batch — fast enough to be imperceptible, long enough for most reachable
+    /// network drives. Volumes that don't respond in time simply get no capacity bar.
+    private func prefetchCapacities(for volumes: [MountedVolume]) -> [URL: VolumeCapacity] {
+        let ud = UserDefaults.standard
+        guard ud.bool(forKey: "showCapacityLine") else { return [:] }
+        let hideForReadOnly = ud.bool(forKey: "hideCapacityForReadOnly")
+
+        var results = [URL: VolumeCapacity]()
+        let lock = NSLock()
+        let group = DispatchGroup()
+
+        for volume in volumes {
+            group.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                defer { group.leave() }
+                let keys: Set<URLResourceKey> = [
+                    .volumeTotalCapacityKey,
+                    .volumeAvailableCapacityKey,
+                    .volumeIsReadOnlyKey,
+                ]
+                guard let vals = try? volume.volumeURL.resourceValues(forKeys: keys),
+                      let total = vals.volumeTotalCapacity,
+                      let free  = vals.volumeAvailableCapacity,
+                      total > 0 else { return }
+                let isRO = vals.volumeIsReadOnly ?? false
+                if hideForReadOnly && isRO { return }
+                lock.lock()
+                results[volume.volumeURL] = VolumeCapacity(usedBytes: total - free, totalBytes: total, isReadOnly: isRO)
+                lock.unlock()
+            }
+        }
+
+        _ = group.wait(timeout: .now() + 0.2)
+        return results
     }
 
     private func buildAppSection(in menu: NSMenu) {
