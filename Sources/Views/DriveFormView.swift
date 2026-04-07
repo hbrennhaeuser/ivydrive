@@ -35,35 +35,38 @@ struct DriveFormView: View {
                 .padding(.bottom, 4)
 
             Form {
-                Picker("Protocol", selection: $driveType) {
-                    ForEach(DriveType.allCases, id: \.self) { type in
-                        Text(type.displayName).tag(type)
+                Section("Protocol") {
+                    Picker("Protocol", selection: $driveType) {
+                        ForEach(DriveType.allCases, id: \.self) { type in
+                            Text(type.displayName).tag(type)
+                        }
+                    }
+                    .disabled(isEditing)
+                    .onChange(of: driveType) { _, _ in
+                        if !isEditing { clearTypeSpecificFields() }
                     }
                 }
-                .disabled(isEditing)
-                .onChange(of: driveType) { _, _ in
-                    if !isEditing { clearTypeSpecificFields() }
+
+                Section("Connection") {
+                    typeSpecificFields
                 }
 
-                typeSpecificFields
-
-                Section {
+                Section("Display") {
                     TextField("Display Name", text: $label,
-                              prompt: Text("Optional — defaults to hostname"))
+                              prompt: Text("Optional — defaults to host/share"))
                 }
 
-                Section("Availability Checks") {
-                    Toggle("Check host reachability", isOn: $checkHostReachability)
-                    Toggle("Check DNS resolution", isOn: $checkDNSResolution)
-                    Toggle("Check port availability", isOn: $checkPortAvailability)
+                Section("Autoconnect") {
+                    Text("No autoconnect settings yet.")
+                        .foregroundStyle(.tertiary)
+                        .italic()
                 }
 
                 Section {
                     DisclosureGroup("Advanced Settings", isExpanded: $advancedExpanded) {
-                        Text("No advanced settings yet.")
-                            .foregroundStyle(.tertiary)
-                            .italic()
-                            .padding(.top, 4)
+                        Toggle("Check host reachability", isOn: $checkHostReachability)
+                        Toggle("Check DNS resolution", isOn: $checkDNSResolution)
+                        Toggle("Check port availability", isOn: $checkPortAvailability)
                     }
                 }
             }
