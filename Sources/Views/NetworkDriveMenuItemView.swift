@@ -111,6 +111,7 @@ final class NetworkDriveMenuItemView: NSView {
     private let mountPoint: URL?
     private let availability: DriveAvailabilityResult?
     private let showAccentBar: Bool
+    private let indented: Bool
     private let onAction: () -> Void
     private var isHovered = false
     private var trackingArea: NSTrackingArea?
@@ -131,6 +132,7 @@ final class NetworkDriveMenuItemView: NSView {
         self.mountPoint = mountPoint
         self.availability = availability
         self.showAccentBar = showAccentBar
+        self.indented = indented
         self.onAction = onAction
 
         let fillColor: NSColor
@@ -182,7 +184,7 @@ final class NetworkDriveMenuItemView: NSView {
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 28),
 
-            nameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: indented ? 28 : 20),
+            nameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: indented ? 26 : 20),
             nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: bubbleView.leadingAnchor, constant: -8),
             nameLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
 
@@ -206,7 +208,9 @@ final class NetworkDriveMenuItemView: NSView {
         }
         guard isHovered else { return }
         NSColor.labelColor.withAlphaComponent(0.08).setFill()
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 2), xRadius: 5, yRadius: 5).fill()
+        let leftInset: CGFloat = indented ? 10 : 4
+        let hoverRect = NSRect(x: leftInset, y: 2, width: bounds.width - leftInset - 4, height: bounds.height - 4)
+        NSBezierPath(roundedRect: hoverRect, xRadius: 5, yRadius: 5).fill()
     }
 
     override func updateTrackingAreas() {

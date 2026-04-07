@@ -184,12 +184,14 @@ final class VolumeMenuItemView: NSView {
     private let iconView: NSImageView
     private let volumeURL: URL
     private let deviceType: DeviceType
+    private let indented: Bool
     private var isHovered = false
     private var trackingArea: NSTrackingArea?
 
     init(icon: NSImage, name: String, volumeURL: URL, deviceType: DeviceType, capacity: VolumeCapacity? = nil, operation: DriveOperation? = nil, indented: Bool = false, onEject: @escaping () -> Void) {
         self.volumeURL = volumeURL
         self.deviceType = deviceType
+        self.indented = indented
         let isEjecting = operation == .ejecting
 
         let ud = UserDefaults.standard
@@ -255,7 +257,7 @@ final class VolumeMenuItemView: NSView {
         var c: [NSLayoutConstraint] = [
             heightAnchor.constraint(equalToConstant: totalHeight),
 
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: indented ? 28 : 20),
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: indented ? 26 : 20),
             iconView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             iconView.widthAnchor.constraint(equalToConstant: 16),
             iconView.heightAnchor.constraint(equalToConstant: 16),
@@ -310,7 +312,9 @@ final class VolumeMenuItemView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard isHovered else { return }
         NSColor.labelColor.withAlphaComponent(0.08).setFill()
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 2), xRadius: 5, yRadius: 5).fill()
+        let leftInset: CGFloat = indented ? 10 : 4
+        let hoverRect = NSRect(x: leftInset, y: 2, width: bounds.width - leftInset - 4, height: bounds.height - 4)
+        NSBezierPath(roundedRect: hoverRect, xRadius: 5, yRadius: 5).fill()
     }
 
     override func updateTrackingAreas() {

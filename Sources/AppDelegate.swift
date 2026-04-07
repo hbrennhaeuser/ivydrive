@@ -154,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if !groupByHost {
             var added = false
-            for drive in allDrives {
+            for drive in allDrives.sorted(by: { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }) {
                 let mounted = connectedIDs.contains(drive.id)
                 if hideConnected && mounted { continue }
                 addNetworkDriveItem(drive, mounted: mounted, availability: availability, to: menu, indented: false)
@@ -169,17 +169,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // Group by scheme://host:port
-        var keyOrder: [String] = []
         var drivesForKey: [String: [NetworkDrive]] = [:]
         for drive in allDrives {
-            let key = drive.hostGroupKey
-            if drivesForKey[key] == nil { keyOrder.append(key) }
-            drivesForKey[key, default: []].append(drive)
+            drivesForKey[drive.hostGroupKey, default: []].append(drive)
+        }
+        let keyOrder = drivesForKey.keys.sorted {
+            (URL(string: $0)?.host ?? $0).localizedStandardCompare(URL(string: $1)?.host ?? $1) == .orderedAscending
         }
 
         var addedAny = false
         for key in keyOrder {
-            let groupDrives = drivesForKey[key]!
+            let groupDrives = drivesForKey[key]!.sorted(by: { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending })
             let unconnectedInGroup = groupDrives.filter { !connectedIDs.contains($0.id) }
             let entriesToShow = hideConnected ? unconnectedInGroup : groupDrives
             if entriesToShow.isEmpty { continue }
@@ -203,12 +203,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             headerItem.view = NetworkGroupHeaderView(
                 host: URL(string: key)?.host ?? key,
                 onConnect: connectAll,
-                showAccentBar: true
+                showAccentBar: false
             )
             menu.addItem(headerItem)
 
             for drive in entriesToShow {
-                addNetworkDriveItem(drive, mounted: connectedIDs.contains(drive.id), availability: availability, to: menu, indented: true, accented: true)
+                addNetworkDriveItem(drive, mounted: connectedIDs.contains(drive.id), availability: availability, to: menu, indented: true, accented: false)
             }
         }
 
