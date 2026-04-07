@@ -315,6 +315,7 @@ final class VolumeMenuItemView: NSView {
         isHovered = true
         needsDisplay = true
         ejectButton.isHidden = false
+        guard UserDefaults.standard.bool(forKey: "showHoverInfo") else { return }
         // Fetch resource values on a background thread — this call can block
         // when a network volume is mounted but the network is unreachable.
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in

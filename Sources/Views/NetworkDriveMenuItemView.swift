@@ -211,6 +211,7 @@ final class NetworkDriveMenuItemView: NSView {
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
         needsDisplay = true
+        guard UserDefaults.standard.bool(forKey: "showHoverInfo") else { return }
         if isConnected, let mp = mountPoint {
             // Fetch resource values on a background thread — this call can block
             // when a network volume is mounted but the network is unreachable.

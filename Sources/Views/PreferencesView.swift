@@ -109,12 +109,14 @@ private struct NetworkDrivesTab: View {
 // MARK: - General Tab
 
 private struct GeneralTab: View {
-    @AppStorage("showCapacityLine")          private var showCapacityLine          = true
-    @AppStorage("showCapacityStats")         private var showCapacityStats         = true
-    @AppStorage("useBinaryUnits")            private var useBinaryUnits            = false
-    @AppStorage("hideCapacityForReadOnly")   private var hideCapacityForReadOnly   = true
-    @AppStorage("groupDrivesByHost")         private var groupDrivesByHost         = true
-    @AppStorage("hideConnectedFromAvailable") private var hideConnectedFromAvailable = false
+    @AppStorage("showCapacityLine")           private var showCapacityLine           = true
+    @AppStorage("showCapacityStats")          private var showCapacityStats          = true
+    @AppStorage("useBinaryUnits")             private var useBinaryUnits             = false
+    @AppStorage("hideCapacityForReadOnly")    private var hideCapacityForReadOnly    = true
+    @AppStorage("groupDrivesByHost")          private var groupDrivesByHost          = true
+    @AppStorage("hideConnectedFromAvailable") private var hideConnectedFromAvailable = true
+    @AppStorage("showHoverInfo")              private var showHoverInfo              = false
+    @AppStorage("hideLocalDrives")            private var hideLocalDrives            = false
 
     var body: some View {
         Form {
@@ -136,6 +138,10 @@ private struct GeneralTab: View {
             Section("Network Drive List") {
                 Toggle("Group drives by host", isOn: $groupDrivesByHost)
                 Toggle("Hide connected drives from available list", isOn: $hideConnectedFromAvailable)
+                Toggle("Hide local drives from connected list", isOn: $hideLocalDrives)
+            }
+            Section("Hover") {
+                Toggle("Show drive info on hover", isOn: $showHoverInfo)
             }
         }
         .formStyle(.grouped)

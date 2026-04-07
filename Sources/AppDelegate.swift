@@ -21,14 +21,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [
-            "showCapacityLine":          true,
-            "showCapacityStats":         true,
-            "useBinaryUnits":            false,
-            "hideCapacityForReadOnly":   true,
-            "groupDrivesByHost":         true,
-            "hideConnectedFromAvailable": false,
+            "showCapacityLine":           true,
+            "showCapacityStats":          true,
+            "useBinaryUnits":             false,
+            "hideCapacityForReadOnly":    true,
+            "groupDrivesByHost":          true,
+            "hideConnectedFromAvailable": true,
+            "showHoverInfo":              false,
+            "hideLocalDrives":            false,
         ])
         notificationManager.configure()
+        setupMainMenu()
         setupStatusItem()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
@@ -36,8 +39,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    // Install a hidden main menu so the responder chain can resolve standard
+    // text-editing shortcuts (Cmd+A/C/V/X/Z) in SwiftUI text fields.
+    // LSUIElement apps have no visible menu bar, but NSApplication still walks
+    // mainMenu when dispatching key equivalents.
+    private func setupMainMenu() {
+        let editMenu = NSMenu(title: "Edit")
+        let editItems: [(String, Selector, String)] = [
+            ("Undo",       Selector(("undo:")),       "z"),
+            ("Redo",       Selector(("redo:")),       "Z"),
+            ("Cut",        #selector(NSText.cut(_:)),        "x"),
+            ("Copy",       #selector(NSText.copy(_:)),       "c"),
+            ("Paste",      #selector(NSText.paste(_:)),      "v"),
+            ("Select All", #selector(NSText.selectAll(_:)),  "a"),
+        ]
+        for (i, (title, action, key)) in editItems.enumerated() {
+            if i == 2 { editMenu.addItem(.separator()) }
+            editMenu.addItem(NSMenuItem(title: title, action: action, keyEquivalent: key))
+        }
+
+        let editHeader = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        editHeader.submenu = editMenu
+
+        let mainMenu = NSMenu()
+        mainMenu.addItem(editHeader)
+        NSApp.mainMenu = mainMenu
+    }
+
     private func setupStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
             button.image = NSImage(
@@ -178,8 +207,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func buildEjectableVolumesSection(in menu: NSMenu) {
-        let volumes = VolumeMonitor.ejectableVolumes()
-        let groupByHost = UserDefaults.standard.bool(forKey: "groupDrivesByHost")
+        let ud = UserDefaults.standard
+        let allVolumes = VolumeMonitor.ejectableVolumes()
+        let volumes = ud.bool(forKey: "hideLocalDrives")
+            ? allVolumes.filter { $0.deviceType == .network }
+            : allVolumes
+        let groupByHost = ud.bool(forKey: "groupDrivesByHost")
 
         if volumes.isEmpty {
             let item = NSMenuItem(title: "No ejectable volumes", action: nil, keyEquivalent: "")
