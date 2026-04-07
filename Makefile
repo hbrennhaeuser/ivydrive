@@ -15,7 +15,8 @@ FRAMEWORKS := -framework Cocoa \
 			  -framework Security \
 			  -framework UserNotifications \
 			  -framework SystemConfiguration \
-			  -framework Network
+			  -framework Network \
+			  -framework ServiceManagement
 
 BINARY := $(MACOS_DIR)/$(APP_NAME)
 PLIST := $(CONTENTS)/Info.plist
