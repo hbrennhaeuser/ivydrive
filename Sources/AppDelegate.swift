@@ -8,11 +8,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let notificationManager = NotificationManager()
 
     private var preferencesWindow: NSWindow?
-    private var aboutWindow: NSWindow?
+    private let preferencesViewModel = PreferencesViewModel()
 
     // MARK: - App Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        UserDefaults.standard.register(defaults: [
+            "showCapacityLine":          true,
+            "showCapacityStats":         true,
+            "useBinaryUnits":            false,
+            "hideCapacityForReadOnly":   true,
+        ])
         notificationManager.configure()
         setupStatusItem()
 
@@ -40,16 +46,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         menu.removeAllItems()
-        buildNetworkDrivesSection(in: menu)
+        let unmounted = driveManager.drives.filter { !driveManager.isMounted($0) }
+        let availability: [UUID: DriveAvailabilityResult]
+        if unmounted.isEmpty {
+            availability = [:]
+        } else {
+            availability = DriveAvailabilityChecker.shared.checkAll(unmounted)
+        }
+        buildNetworkDrivesSection(in: menu, availability: availability)
         menu.addItem(.separator())
         buildEjectableVolumesSection(in: menu)
         menu.addItem(.separator())
         buildAppSection(in: menu)
     }
 
+    func menuDidClose(_ menu: NSMenu) {
+        DriveInfoPanel.shared.hide()
+    }
+
     // MARK: - Menu Sections
 
-    private func buildNetworkDrivesSection(in menu: NSMenu) {
+    private func buildNetworkDrivesSection(in menu: NSMenu, availability: [UUID: DriveAvailabilityResult]) {
         if driveManager.drives.isEmpty {
             let item = NSMenuItem(title: "No network drives configured", action: nil, keyEquivalent: "")
             item.isEnabled = false
@@ -62,8 +79,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let item = NSMenuItem()
 
             let view = NetworkDriveMenuItemView(
-                name: drive.displayName,
-                connected: mounted
+                drive: drive,
+                connected: mounted,
+                mountPoint: driveManager.mountPoint(for: drive),
+                availability: availability[drive.id]
             ) { [weak self] in
                 self?.connectDrive(drive)
             }
@@ -88,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let icon = NSWorkspace.shared.icon(forFile: volume.path)
             icon.size = NSSize(width: 16, height: 16)
 
-            let view = VolumeMenuItemView(icon: icon, name: volume.name) { [weak self] in
+            let view = VolumeMenuItemView(icon: icon, name: volume.name, volumeURL: volume.volumeURL, deviceType: volume.deviceType) { [weak self] in
                 self?.ejectVolume(named: volume.name, at: volume.volumeURL)
             }
             item.view = view
@@ -146,39 +165,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showPreferences() {
+        openPreferences(tab: 0)
+    }
+
+    @objc private func showAbout() {
+        openPreferences(tab: 2)
+    }
+
+    private func openPreferences(tab: Int) {
+        preferencesViewModel.selectedTab = tab
         if preferencesWindow == nil {
+            let view = PreferencesView(manager: driveManager, viewModel: preferencesViewModel)
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 500, height: 400),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                contentRect: NSRect(x: 0, y: 0, width: 500, height: 490),
+                styleMask: [.titled, .closable, .miniaturizable],
                 backing: .buffered,
                 defer: false
             )
             window.title = "MenuBarFS Preferences"
-            window.contentView = NSHostingView(rootView: PreferencesView(manager: driveManager))
+            window.contentView = NSHostingView(rootView: view)
             window.isReleasedWhenClosed = false
-            window.minSize = NSSize(width: 400, height: 300)
             preferencesWindow = window
         }
         preferencesWindow?.center()
         preferencesWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
-    @objc private func showAbout() {
-        if aboutWindow == nil {
-            let window = NSWindow(
-                contentRect: .zero,
-                styleMask: [.titled, .closable],
-                backing: .buffered,
-                defer: false
-            )
-            window.title = "About MenuBarFS"
-            window.contentView = NSHostingView(rootView: AboutView())
-            window.isReleasedWhenClosed = false
-            aboutWindow = window
-        }
-        aboutWindow?.center()
-        aboutWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 

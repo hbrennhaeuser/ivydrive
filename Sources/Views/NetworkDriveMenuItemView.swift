@@ -32,20 +32,41 @@ final class NetworkDriveMenuItemView: NSView {
     private let dotView: NSView
     private let nameLabel: NSTextField
     private let connectPill: ConnectPillView
+    private let drive: NetworkDrive
     private let isConnected: Bool
+    private let mountPoint: URL?
+    private let availability: DriveAvailabilityResult?
     private let onAction: () -> Void
     private var trackingArea: NSTrackingArea?
 
-    init(name: String, connected: Bool, onAction: @escaping () -> Void) {
+    init(
+        drive: NetworkDrive,
+        connected: Bool,
+        mountPoint: URL?,
+        availability: DriveAvailabilityResult? = nil,
+        onAction: @escaping () -> Void
+    ) {
+        self.drive = drive
         self.isConnected = connected
+        self.mountPoint = mountPoint
+        self.availability = availability
         self.onAction = onAction
+
+        let dotColor: NSColor
+        if connected {
+            dotColor = .systemGreen
+        } else if let avail = availability, avail.dotIsOrange {
+            dotColor = .systemOrange
+        } else {
+            dotColor = .systemRed
+        }
 
         dotView = NSView(frame: .zero)
         dotView.wantsLayer = true
         dotView.layer?.cornerRadius = 4
-        dotView.layer?.backgroundColor = (connected ? NSColor.systemGreen : NSColor.systemRed).cgColor
+        dotView.layer?.backgroundColor = dotColor.cgColor
 
-        nameLabel = NSTextField(labelWithString: name)
+        nameLabel = NSTextField(labelWithString: drive.displayName)
         nameLabel.font = .menuFont(ofSize: 0)
         nameLabel.lineBreakMode = .byTruncatingTail
         nameLabel.isEditable = false
@@ -102,10 +123,18 @@ final class NetworkDriveMenuItemView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         if !isConnected { connectPill.isHidden = false }
+        let rows: [(label: String, value: String)]
+        if isConnected, let mp = mountPoint {
+            rows = DriveInfoPanel.rowsForMountedVolume(at: mp)
+        } else {
+            rows = DriveInfoPanel.rowsForUnmountedDrive(drive, availability: availability)
+        }
+        DriveInfoPanel.shared.show(rows: rows, anchoredTo: self)
     }
 
     override func mouseExited(with event: NSEvent) {
         connectPill.isHidden = true
+        DriveInfoPanel.shared.hide()
     }
 
     override func mouseUp(with event: NSEvent) {
