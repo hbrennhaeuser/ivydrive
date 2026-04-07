@@ -23,9 +23,16 @@ private final class StatusBubbleView: NSView {
 }
 
 /// Header row for a group of drives sharing the same server host.
-/// Carries no status indicator -- sub-entries show their own bubbles.
+/// When onConnect is provided the row is interactive: it highlights on hover
+/// and triggers a connect-all for the group on click.
 final class NetworkGroupHeaderView: NSView {
-    init(host: String) {
+    private let onConnect: (() -> Void)?
+    private var isHovered = false
+    private var trackingArea: NSTrackingArea?
+
+    init(host: String, onConnect: (() -> Void)? = nil) {
+        self.onConnect = onConnect
+
         let label = NSTextField(labelWithString: host)
         label.font = .systemFont(ofSize: 11, weight: .semibold)
         label.textColor = .secondaryLabelColor
@@ -44,11 +51,48 @@ final class NetworkGroupHeaderView: NSView {
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 24),
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
+
     required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard isHovered, onConnect != nil else { return }
+        NSColor.labelColor.withAlphaComponent(0.08).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 2), xRadius: 5, yRadius: 5).fill()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        guard onConnect != nil else { return }
+        if let existing = trackingArea { removeTrackingArea(existing) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        needsDisplay = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard let action = onConnect else { return }
+        enclosingMenuItem?.menu?.cancelTracking()
+        action()
+    }
 }
 
 final class NetworkDriveMenuItemView: NSView {
@@ -116,11 +160,11 @@ final class NetworkDriveMenuItemView: NSView {
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 28),
 
-            nameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: indented ? 36 : 12),
+            nameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: indented ? 28 : 20),
             nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: bubbleView.leadingAnchor, constant: -8),
             nameLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            bubbleView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            bubbleView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             bubbleView.centerYAnchor.constraint(equalTo: centerYAnchor),
             bubbleView.widthAnchor.constraint(equalToConstant: 18),
             bubbleView.heightAnchor.constraint(equalToConstant: 18),

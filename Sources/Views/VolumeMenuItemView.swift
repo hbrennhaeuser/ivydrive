@@ -144,14 +144,14 @@ final class VolumeGroupHeaderView: NSView {
 
         var c: [NSLayoutConstraint] = [
             heightAnchor.constraint(equalToConstant: totalHeight),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 19),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
             label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
             label.topAnchor.constraint(equalTo: topAnchor, constant: 4),
         ]
 
         if let bar = barView {
             c += [
-                bar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 19),
+                bar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
                 bar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
                 bar.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 2),
                 bar.heightAnchor.constraint(equalToConstant: 4),
@@ -161,7 +161,7 @@ final class VolumeGroupHeaderView: NSView {
         if let stats = statsTF {
             let anchor: NSView = barView ?? label
             c += [
-                stats.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 19),
+                stats.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
                 stats.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
                 stats.topAnchor.constraint(equalTo: anchor.bottomAnchor, constant: 2),
             ]
@@ -243,7 +243,7 @@ final class VolumeMenuItemView: NSView {
         var c: [NSLayoutConstraint] = [
             heightAnchor.constraint(equalToConstant: totalHeight),
 
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: indented ? 35 : 19),
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: indented ? 28 : 20),
             iconView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             iconView.widthAnchor.constraint(equalToConstant: 16),
             iconView.heightAnchor.constraint(equalToConstant: 16),

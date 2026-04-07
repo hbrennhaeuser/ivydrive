@@ -122,9 +122,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 continue
             }
 
-            // Multi-drive group: non-interactive header + indented sub-entries
+            // Multi-drive group: header (clickable when any sub-entry is unconnected) + indented sub-entries
+            let connectAll: (() -> Void)? = unconnectedInGroup.isEmpty ? nil : { [weak self] in
+                guard let self else { return }
+                for drive in unconnectedInGroup {
+                    self.connectDrive(drive)
+                }
+            }
             let headerItem = NSMenuItem()
-            headerItem.view = NetworkGroupHeaderView(host: URL(string: key)?.host ?? key)
+            headerItem.view = NetworkGroupHeaderView(
+                host: URL(string: key)?.host ?? key,
+                onConnect: connectAll
+            )
             menu.addItem(headerItem)
 
             for drive in entriesToShow {
