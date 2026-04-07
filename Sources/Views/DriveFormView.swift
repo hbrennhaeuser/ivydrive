@@ -22,7 +22,6 @@ struct DriveFormView: View {
     @State private var checkHostReachability = false
     @State private var checkDNSResolution = false
     @State private var checkPortAvailability = false
-
     @State private var advancedExpanded = false
 
     private var isEditing: Bool { drive != nil }
@@ -56,14 +55,17 @@ struct DriveFormView: View {
                               prompt: Text("Optional — defaults to host/share"))
                 }
 
-                Section("Autoconnect") {
-                    Text("No autoconnect settings yet.")
-                        .foregroundStyle(.tertiary)
-                        .italic()
-                }
-
                 Section {
-                    DisclosureGroup("Advanced Settings", isExpanded: $advancedExpanded) {
+                    DisclosureGroup("Advanced", isExpanded: $advancedExpanded) {
+                        Text("Autoconnect")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                        Text("No autoconnect settings yet.")
+                            .foregroundStyle(.tertiary)
+                            .italic()
+                        Text("Availability Checks")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
                         Toggle("Check host reachability", isOn: $checkHostReachability)
                         Toggle("Check DNS resolution", isOn: $checkDNSResolution)
                         Toggle("Check port availability", isOn: $checkPortAvailability)
@@ -156,6 +158,9 @@ struct DriveFormView: View {
         checkHostReachability = drive.checkHostReachability
         checkDNSResolution = drive.checkDNSResolution
         checkPortAvailability = drive.checkPortAvailability
+        if drive.checkHostReachability || drive.checkDNSResolution || drive.checkPortAvailability {
+            advancedExpanded = true
+        }
 
         guard driveType != .other,
               let parsed = URL(string: drive.url),
