@@ -11,7 +11,7 @@ struct DriveAvailabilityResult {
     var port: Status
 
     /// True when at least one check ran and every run check passed.
-    var dotIsOrange: Bool {
+    var dotIsTeal: Bool {
         let enabled = [dns, reachable, port].filter { $0 != .disabled && $0 != .skipped }
         return !enabled.isEmpty && enabled.allSatisfy { $0 == .passed }
     }

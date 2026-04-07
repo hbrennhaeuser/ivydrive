@@ -55,8 +55,8 @@ final class NetworkDriveMenuItemView: NSView {
         let dotColor: NSColor
         if connected {
             dotColor = .systemGreen
-        } else if let avail = availability, avail.dotIsOrange {
-            dotColor = .systemOrange
+        } else if let avail = availability, avail.dotIsTeal {
+            dotColor = .systemTeal
         } else {
             dotColor = .systemRed
         }
