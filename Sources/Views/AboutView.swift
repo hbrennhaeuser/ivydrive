@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AboutView: View {
-    private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.4.0"
+    private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.5.0"
     private let repositoryURL = URL(string: "https://github.com/hbrennhaeuser/menubarfs")!
 
     var body: some View {
