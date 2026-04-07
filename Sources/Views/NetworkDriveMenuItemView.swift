@@ -1,9 +1,59 @@
 import Cocoa
 
+private final class StatusBubbleView: NSView {
+    init(fillColor: NSColor) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 9
+        layer?.backgroundColor = fillColor.cgColor
+
+        let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
+        let image = NSImage(systemSymbolName: "network", accessibilityDescription: nil)
+            .flatMap { $0.withSymbolConfiguration(config) }
+        let iv = NSImageView(image: image ?? NSImage())
+        iv.contentTintColor = .white
+        iv.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(iv)
+        NSLayoutConstraint.activate([
+            iv.centerXAnchor.constraint(equalTo: centerXAnchor),
+            iv.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError() }
+}
+
+/// Header row for a group of drives sharing the same server host.
+/// Carries no status indicator -- sub-entries show their own bubbles.
+final class NetworkGroupHeaderView: NSView {
+    init(host: String) {
+        let label = NSTextField(labelWithString: host)
+        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byTruncatingTail
+        label.isEditable = false
+        label.isBordered = false
+        label.drawsBackground = false
+
+        super.init(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        autoresizingMask = .width
+
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 24),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError() }
+}
+
 final class NetworkDriveMenuItemView: NSView {
-    private let dotView: NSView
+    private let bubbleView: StatusBubbleView
     private let nameLabel: NSTextField
-    private let connectIconView: NSImageView
     private let drive: NetworkDrive
     private let isConnected: Bool
     private let mountPoint: URL?
@@ -17,6 +67,7 @@ final class NetworkDriveMenuItemView: NSView {
         connected: Bool,
         mountPoint: URL?,
         availability: DriveAvailabilityResult? = nil,
+        indented: Bool = false,
         onAction: @escaping () -> Void
     ) {
         self.drive = drive
@@ -25,19 +76,24 @@ final class NetworkDriveMenuItemView: NSView {
         self.availability = availability
         self.onAction = onAction
 
-        let dotColor: NSColor
+        let fillColor: NSColor
         if connected {
-            dotColor = .systemGreen
-        } else if let avail = availability, avail.dotIsTeal {
-            dotColor = .systemBlue
+            fillColor = .systemGreen
+        } else if let avail = availability {
+            let allDisabled = [avail.dns, avail.reachable, avail.port]
+                .allSatisfy { $0 == .disabled || $0 == .skipped }
+            if allDisabled {
+                fillColor = NSColor.labelColor.withAlphaComponent(0.25)
+            } else if avail.dotIsTeal {
+                fillColor = .systemBlue
+            } else {
+                fillColor = .systemRed
+            }
         } else {
-            dotColor = .systemRed
+            fillColor = NSColor.labelColor.withAlphaComponent(0.25)
         }
 
-        dotView = NSView(frame: .zero)
-        dotView.wantsLayer = true
-        dotView.layer?.cornerRadius = 4
-        dotView.layer?.backgroundColor = dotColor.cgColor
+        bubbleView = StatusBubbleView(fillColor: fillColor)
 
         nameLabel = NSTextField(labelWithString: drive.displayName)
         nameLabel.font = .menuFont(ofSize: 0)
@@ -46,19 +102,10 @@ final class NetworkDriveMenuItemView: NSView {
         nameLabel.isBordered = false
         nameLabel.drawsBackground = false
 
-        let iconConfig = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
-        let iconImage = connected ? nil : NSImage(
-            systemSymbolName: "cable.connector",
-            accessibilityDescription: "Connect"
-        )?.withSymbolConfiguration(iconConfig)
-        connectIconView = NSImageView(image: iconImage ?? NSImage())
-        connectIconView.contentTintColor = .secondaryLabelColor
-        connectIconView.isHidden = true
-
         super.init(frame: NSRect(x: 0, y: 0, width: 280, height: 28))
         autoresizingMask = .width
 
-        for v in [dotView, nameLabel, connectIconView] as [NSView] {
+        for v in [bubbleView, nameLabel] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
@@ -69,22 +116,14 @@ final class NetworkDriveMenuItemView: NSView {
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 28),
 
-            // Name anchored to the left edge (mirrors macOS Wi-Fi menu layout)
-            nameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: connectIconView.leadingAnchor, constant: -8),
+            nameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: indented ? 36 : 12),
+            nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: bubbleView.leadingAnchor, constant: -8),
             nameLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            // Connect icon sits to the left of the dot (only shown on hover)
-            connectIconView.trailingAnchor.constraint(equalTo: dotView.leadingAnchor, constant: -6),
-            connectIconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            connectIconView.widthAnchor.constraint(equalToConstant: 16),
-            connectIconView.heightAnchor.constraint(equalToConstant: 16),
-
-            // Status dot on the right (mirrors lock icon position in Wi-Fi menu)
-            dotView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            dotView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            dotView.widthAnchor.constraint(equalToConstant: 8),
-            dotView.heightAnchor.constraint(equalToConstant: 8),
+            bubbleView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            bubbleView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            bubbleView.widthAnchor.constraint(equalToConstant: 18),
+            bubbleView.heightAnchor.constraint(equalToConstant: 18),
         ])
     }
 
@@ -112,7 +151,6 @@ final class NetworkDriveMenuItemView: NSView {
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
         needsDisplay = true
-        if !isConnected { connectIconView.isHidden = false }
         if isConnected, let mp = mountPoint {
             // Fetch resource values on a background thread — this call can block
             // when a network volume is mounted but the network is unreachable.
@@ -132,7 +170,6 @@ final class NetworkDriveMenuItemView: NSView {
     override func mouseExited(with event: NSEvent) {
         isHovered = false
         needsDisplay = true
-        connectIconView.isHidden = true
         DriveInfoPanel.shared.hide()
     }
 
