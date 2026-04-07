@@ -1,4 +1,5 @@
 import SwiftUI
+import ServiceManagement
 
 final class PreferencesViewModel: ObservableObject {
     @Published var selectedTab: Int = 0
@@ -15,18 +16,28 @@ struct PreferencesView: View {
                     Label("Network Drives", systemImage: "externaldrive.connected.to.line.below")
                 }
                 .tag(0)
+            AppearanceTab()
+                .tabItem {
+                    Label("Appearance", systemImage: "paintbrush")
+                }
+                .tag(1)
             GeneralTab()
                 .tabItem {
                     Label("General", systemImage: "gearshape")
                 }
-                .tag(1)
+                .tag(2)
+            MaintenanceTab()
+                .tabItem {
+                    Label("Maintenance", systemImage: "wrench.and.screwdriver")
+                }
+                .tag(3)
             AboutView()
                 .tabItem {
                     Label("About", systemImage: "info.circle")
                 }
-                .tag(2)
+                .tag(4)
         }
-        .frame(width: 500, height: 490)
+        .frame(width: 620, height: 490)
     }
 }
 
@@ -106,27 +117,21 @@ private struct NetworkDrivesTab: View {
     }
 }
 
-// MARK: - General Tab
+// MARK: - Appearance Tab
 
-private struct GeneralTab: View {
-    @AppStorage("showCapacityLine")           private var showCapacityLine           = true
-    @AppStorage("showCapacityStats")          private var showCapacityStats          = true
-    @AppStorage("useBinaryUnits")             private var useBinaryUnits             = false
-    @AppStorage("hideCapacityForReadOnly")    private var hideCapacityForReadOnly    = true
-    @AppStorage("groupDrivesByHost")          private var groupDrivesByHost          = true
-    @AppStorage("hideConnectedFromAvailable") private var hideConnectedFromAvailable = true
-    @AppStorage("showHoverInfo")              private var showHoverInfo              = false
-    @AppStorage("hideLocalDrives")            private var hideLocalDrives            = false
+private struct AppearanceTab: View {
+    @AppStorage("showCapacityLine")        private var showCapacityLine        = true
+    @AppStorage("showCapacityStats")       private var showCapacityStats       = true
+    @AppStorage("useBinaryUnits")          private var useBinaryUnits          = false
+    @AppStorage("hideCapacityForReadOnly") private var hideCapacityForReadOnly = true
 
     var body: some View {
         Form {
-            Section("Capacity Bar/Stats") {
+            Section("Capacity Bar") {
                 Toggle("Show capacity bar", isOn: $showCapacityLine)
                 Toggle("Show capacity stats", isOn: $showCapacityStats)
                     .disabled(!showCapacityLine)
-            }
-            Section("Hide Capacity Bar/Stats For") {
-                Toggle("Read-only volumes", isOn: $hideCapacityForReadOnly)
+                Toggle("Hide for read-only volumes", isOn: $hideCapacityForReadOnly)
             }
             Section("Units") {
                 Picker("Capacity units", selection: $useBinaryUnits) {
@@ -135,10 +140,33 @@ private struct GeneralTab: View {
                 }
                 .pickerStyle(.radioGroup)
             }
+        }
+        .formStyle(.grouped)
+        .padding(.top, 8)
+    }
+}
+
+// MARK: - General Tab
+
+private struct GeneralTab: View {
+    @AppStorage("groupDrivesByHost")            private var groupDrivesByHost            = true
+    @AppStorage("hideConnectedFromAvailable")  private var hideConnectedFromAvailable  = true
+    @AppStorage("showHoverInfo")               private var showHoverInfo               = false
+    @AppStorage("hideLocalDrives")             private var hideLocalDrives             = false
+    @AppStorage("clickGroupToConnectAll")      private var clickGroupToConnectAll      = true
+    @AppStorage("clickVolumeToOpenInFinder")   private var clickVolumeToOpenInFinder   = true
+
+    var body: some View {
+        Form {
             Section("Network Drive List") {
                 Toggle("Group drives by host", isOn: $groupDrivesByHost)
+                Toggle("Click group header to connect all", isOn: $clickGroupToConnectAll)
+                    .disabled(!groupDrivesByHost)
                 Toggle("Hide connected drives from available list", isOn: $hideConnectedFromAvailable)
                 Toggle("Hide local drives from connected list", isOn: $hideLocalDrives)
+            }
+            Section("Connected Drives") {
+                Toggle("Click to open in Finder", isOn: $clickVolumeToOpenInFinder)
             }
             Section("Hover") {
                 Toggle("Show drive info on hover", isOn: $showHoverInfo)
@@ -146,5 +174,62 @@ private struct GeneralTab: View {
         }
         .formStyle(.grouped)
         .padding(.top, 8)
+    }
+}
+
+// MARK: - Maintenance Tab
+
+private struct MaintenanceTab: View {
+    @State private var loginItemEnabled: Bool = false
+    @State private var showingResetConfirmation = false
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Launch at login", isOn: $loginItemEnabled)
+                    .onChange(of: loginItemEnabled) { _, enabled in
+                        if enabled {
+                            try? SMAppService.mainApp.register()
+                        } else {
+                            try? SMAppService.mainApp.unregister()
+                        }
+                    }
+            } header: {
+                Text("Startup")
+            } footer: {
+                Text("Automatically start MenuBarFS when you log in. You can also manage this in System Settings → General → Login Items.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Button(role: .destructive, action: { showingResetConfirmation = true }) {
+                    Label("Reset All Settings", systemImage: "trash")
+                }
+            } header: {
+                Text("Data Management")
+            } footer: {
+                Text("Removes all preferences and saved drives. The app will quit immediately.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding(.top, 8)
+        .onAppear {
+            loginItemEnabled = SMAppService.mainApp.status == .enabled
+        }
+        .confirmationDialog(
+            "Reset All Settings",
+            isPresented: $showingResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reset and Quit", role: .destructive) {
+                if let bundleID = Bundle.main.bundleIdentifier {
+                    UserDefaults.standard.removePersistentDomain(forName: bundleID)
+                }
+                NSApp.terminate(nil)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("All settings and saved drives will be permanently deleted. This cannot be undone.")
+        }
     }
 }
