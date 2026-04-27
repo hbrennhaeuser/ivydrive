@@ -24,6 +24,14 @@ final class DriveAvailabilityChecker {
 
     private init() {}
 
+    /// Runs checks asynchronously; calls `completion` on the main queue when done.
+    func checkAllAsync(_ drives: [NetworkDrive], timeout: TimeInterval = 1.5, completion: @escaping ([UUID: DriveAvailabilityResult]) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let results = self.checkAll(drives, timeout: timeout)
+            DispatchQueue.main.async { completion(results) }
+        }
+    }
+
     /// Runs all enabled checks for all provided drives fully in parallel.
     /// Blocks the caller for at most `timeout` seconds.
     func checkAll(_ drives: [NetworkDrive], timeout: TimeInterval = 1.5) -> [UUID: DriveAvailabilityResult] {

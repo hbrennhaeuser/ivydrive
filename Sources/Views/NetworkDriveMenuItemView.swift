@@ -124,6 +124,7 @@ final class NetworkDriveMenuItemView: NSView {
         operation: DriveOperation? = nil,
         indented: Bool = false,
         showAccentBar: Bool = false,
+        isCheckingAvailability: Bool = false,
         onAction: @escaping () -> Void
     ) {
         self.drive = drive
@@ -152,14 +153,15 @@ final class NetworkDriveMenuItemView: NSView {
             fillColor = NSColor.labelColor.withAlphaComponent(0.25)
         }
 
+        let showSpinner = operation == .connecting || (isCheckingAvailability && availability == nil)
         bubbleView = StatusBubbleView(fillColor: fillColor)
-        bubbleView.alphaValue = operation == .connecting ? 0 : 1
+        bubbleView.alphaValue = showSpinner ? 0 : 1
 
         spinner = NSProgressIndicator()
         spinner.style = .spinning
         spinner.controlSize = .small
         spinner.isIndeterminate = true
-        spinner.isHidden = operation != .connecting
+        spinner.isHidden = !showSpinner
 
         nameLabel = NSTextField(labelWithString: drive.displayName)
         nameLabel.font = .menuFont(ofSize: 0)
@@ -176,7 +178,7 @@ final class NetworkDriveMenuItemView: NSView {
             addSubview(v)
         }
 
-        if operation == .connecting { spinner.startAnimation(nil) }
+        if showSpinner { spinner.startAnimation(nil) }
 
         nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         nameLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)

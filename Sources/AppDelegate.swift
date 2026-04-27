@@ -19,6 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var activeOperations: [AnyHashable: DriveOperation] = [:]
     private var isMenuOpen = false
 
+    private var cachedAvailability: [UUID: DriveAvailabilityResult] = [:]
+    private var isCheckingAvailability = false
+
     // MARK: - App Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -126,18 +129,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func rebuildMenu() {
         menu.removeAllItems()
-        let unmounted = driveManager.drives.filter { !driveManager.isMounted($0) }
-        let availability = unmounted.isEmpty ? [:] : DriveAvailabilityChecker.shared.checkAll(unmounted)
-        buildNetworkDrivesSection(in: menu, availability: availability)
+        buildNetworkDrivesSection(in: menu, availability: cachedAvailability, isChecking: isCheckingAvailability)
         menu.addItem(.separator())
         buildEjectableVolumesSection(in: menu)
         menu.addItem(.separator())
         buildAppSection(in: menu)
+
+        let unmounted = driveManager.drives.filter { !driveManager.isMounted($0) }
+        guard !unmounted.isEmpty, !isCheckingAvailability else { return }
+        isCheckingAvailability = true
+        DriveAvailabilityChecker.shared.checkAllAsync(unmounted) { [weak self] results in
+            guard let self else { return }
+            self.cachedAvailability = results
+            self.isCheckingAvailability = false
+            if self.isMenuOpen { self.rebuildMenu() }
+        }
     }
 
     // MARK: - Menu Sections
 
-    private func buildNetworkDrivesSection(in menu: NSMenu, availability: [UUID: DriveAvailabilityResult]) {
+    private func buildNetworkDrivesSection(in menu: NSMenu, availability: [UUID: DriveAvailabilityResult], isChecking: Bool) {
         let ud = UserDefaults.standard
         let groupByHost   = ud.bool(forKey: "groupDrivesByHost")
         let hideConnected = ud.bool(forKey: "hideConnectedFromAvailable")
@@ -157,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             for drive in allDrives.sorted(by: { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }) {
                 let mounted = connectedIDs.contains(drive.id)
                 if hideConnected && mounted { continue }
-                addNetworkDriveItem(drive, mounted: mounted, availability: availability, to: menu, indented: false)
+                addNetworkDriveItem(drive, mounted: mounted, availability: availability, to: menu, indented: false, isChecking: isChecking)
                 added = true
             }
             if !added {
@@ -187,7 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             if groupDrives.count == 1 {
                 let drive = groupDrives[0]
-                addNetworkDriveItem(drive, mounted: connectedIDs.contains(drive.id), availability: availability, to: menu, indented: false)
+                addNetworkDriveItem(drive, mounted: connectedIDs.contains(drive.id), availability: availability, to: menu, indented: false, isChecking: isChecking)
                 continue
             }
 
@@ -208,7 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(headerItem)
 
             for drive in entriesToShow {
-                addNetworkDriveItem(drive, mounted: connectedIDs.contains(drive.id), availability: availability, to: menu, indented: true, accented: false)
+                addNetworkDriveItem(drive, mounted: connectedIDs.contains(drive.id), availability: availability, to: menu, indented: true, accented: false, isChecking: isChecking)
             }
         }
 
@@ -225,7 +236,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         availability: [UUID: DriveAvailabilityResult],
         to menu: NSMenu,
         indented: Bool,
-        accented: Bool = false
+        accented: Bool = false,
+        isChecking: Bool = false
     ) {
         let item = NSMenuItem()
         let view = NetworkDriveMenuItemView(
@@ -235,7 +247,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             availability: availability[drive.id],
             operation: activeOperations[drive.id],
             indented: indented,
-            showAccentBar: accented
+            showAccentBar: accented,
+            isCheckingAvailability: isChecking && !mounted
         ) { [weak self] in
             self?.connectDrive(drive)
         }
