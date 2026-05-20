@@ -44,14 +44,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "clickGroupToConnectAll":       true,
             "clickVolumeToOpenInFinder":    true,
             "didAskAboutLoginItem":         false,
+            "didRequestNotificationPermission": false,
         ])
         notificationManager.configure()
         setupMainMenu()
         setupStatusItem()
         autoConnectService.start()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            self?.notificationManager.requestAuthorizationIfNeeded()
+        let ud = UserDefaults.standard
+        if !ud.bool(forKey: "didRequestNotificationPermission") {
+            ud.set(true, forKey: "didRequestNotificationPermission")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.notificationManager.requestAuthorizationIfNeeded()
+            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.promptForLoginItemIfNeeded()
