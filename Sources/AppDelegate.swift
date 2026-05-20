@@ -22,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var cachedAvailability: [UUID: DriveAvailabilityResult] = [:]
     private var isCheckingAvailability = false
     private var liveAvailabilityViews: [UUID: NetworkDriveMenuItemView] = [:]
+    private var lastCheckTime: Date?
+    private let cacheTTL: TimeInterval = 60
 
     // MARK: - App Lifecycle
 
@@ -138,14 +140,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         buildAppSection(in: menu)
 
         let unmounted = driveManager.drives.filter { !driveManager.isMounted($0) }
-        guard !unmounted.isEmpty, !isCheckingAvailability else { return }
+        guard !unmounted.isEmpty else { return }
+
+        if let last = lastCheckTime, Date().timeIntervalSince(last) < cacheTTL,
+           unmounted.allSatisfy({ cachedAvailability[$0.id] != nil }) {
+            return
+        }
+
+        let uncached = unmounted.filter { cachedAvailability[$0.id] == nil }
+        let toCheck  = uncached.isEmpty ? unmounted : uncached
+        startAvailabilityCheck(for: toCheck)
+    }
+
+    private func startAvailabilityCheck(for drives: [NetworkDrive]) {
+        guard !drives.isEmpty, !isCheckingAvailability else { return }
         isCheckingAvailability = true
-        DriveAvailabilityChecker.shared.checkAllAsync(unmounted) { [weak self] results in
+        DriveAvailabilityChecker.shared.checkAllAsync(drives) { [weak self] results in
             guard let self else { return }
-            self.cachedAvailability = results
+            self.cachedAvailability.merge(results) { _, new in new }
+            self.lastCheckTime = Date()
             self.isCheckingAvailability = false
             for (id, result) in results {
                 self.liveAvailabilityViews[id]?.updateAvailability(result)
+            }
+            // Follow-up: check any unmounted drives that still have no cache entry
+            // (e.g. drives that came in while a batch was already running).
+            let unmounted = self.driveManager.drives.filter { !self.driveManager.isMounted($0) }
+            let stillUncached = unmounted.filter { self.cachedAvailability[$0.id] == nil }
+            if !stillUncached.isEmpty {
+                self.startAvailabilityCheck(for: stillUncached)
             }
         }
     }

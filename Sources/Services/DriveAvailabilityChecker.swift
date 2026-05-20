@@ -20,115 +20,177 @@ struct DriveAvailabilityResult {
 final class DriveAvailabilityChecker {
     static let shared = DriveAvailabilityChecker()
 
-    private let queue = DispatchQueue(label: "com.menubarfs.availability", attributes: .concurrent)
+    // Max 6 host checks run concurrently; prevents saturating the network stack
+    // when many drives are configured.
+    private let hostQueue: OperationQueue = {
+        let q = OperationQueue()
+        q.name = "com.menubarfs.availability"
+        q.maxConcurrentOperationCount = 6
+        q.qualityOfService = .userInitiated
+        return q
+    }()
+
+    private enum Timeout {
+        static let dns:     TimeInterval = 0.2   // getaddrinfo cap
+        static let tcp:     TimeInterval = 0.5   // non-blocking connect poll
+        static let postDNS: TimeInterval = 0.8   // reachability + port budget
+        static let batch:   TimeInterval = 1.0   // whole checkAll wall-clock cap
+    }
+
+    private struct HostResult {
+        var dns:      DriveAvailabilityResult.Status = .disabled
+        var reachable: DriveAvailabilityResult.Status = .disabled
+        var port:     DriveAvailabilityResult.Status = .disabled
+    }
 
     private init() {}
 
-    /// Runs checks asynchronously; calls `completion` on the main queue when done.
-    func checkAllAsync(_ drives: [NetworkDrive], timeout: TimeInterval = 1.5, completion: @escaping ([UUID: DriveAvailabilityResult]) -> Void) {
+    // MARK: - Public API
+
+    /// Runs all checks off the main thread; delivers results on the main queue.
+    func checkAllAsync(_ drives: [NetworkDrive], completion: @escaping ([UUID: DriveAvailabilityResult]) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
-            let results = self.checkAll(drives, timeout: timeout)
+            let results = self.checkAll(drives)
             DispatchQueue.main.async { completion(results) }
         }
     }
 
-    /// Runs all enabled checks for all provided drives fully in parallel.
-    /// Blocks the caller for at most `timeout` seconds.
-    func checkAll(_ drives: [NetworkDrive], timeout: TimeInterval = 1.5) -> [UUID: DriveAvailabilityResult] {
+    /// Checks all drives, deduplicating by host+scheme+port.
+    /// Blocks the caller for at most Timeout.batch seconds.
+    func checkAll(_ drives: [NetworkDrive]) -> [UUID: DriveAvailabilityResult] {
         var results = [UUID: DriveAvailabilityResult]()
         let lock = NSLock()
         let group = DispatchGroup()
 
-        for drive in drives {
-            guard drive.checkDNSResolution || drive.checkHostReachability || drive.checkPortAvailability else {
-                results[drive.id] = DriveAvailabilityResult(driveID: drive.id, dns: .disabled, reachable: .disabled, port: .disabled)
-                continue
-            }
+        // Drives with all checks disabled: record immediately, no network needed.
+        for drive in drives where !drive.checkDNSResolution && !drive.checkHostReachability && !drive.checkPortAvailability {
+            results[drive.id] = DriveAvailabilityResult(driveID: drive.id, dns: .disabled, reachable: .disabled, port: .disabled)
+        }
+
+        // Deduplicate by hostGroupKey (scheme://host:port).
+        // Drives sharing the same key get one network check; results are fanned out.
+        var groups: [String: [NetworkDrive]] = [:]
+        for drive in drives where drive.checkDNSResolution || drive.checkHostReachability || drive.checkPortAvailability {
+            groups[drive.hostGroupKey, default: []].append(drive)
+        }
+
+        for (_, groupDrives) in groups {
+            guard let first   = groupDrives.first,
+                  let parsed  = URL(string: first.url),
+                  let host    = parsed.host else { continue }
+
+            let port    = parsed.port ?? Self.defaultPort(for: parsed.scheme)
+            let isIP    = Self.isIPAddress(host)
+            // Union of enabled checks across all drives in the group.
+            let runDNS  = groupDrives.contains { $0.checkDNSResolution }
+            let runPing = groupDrives.contains { $0.checkHostReachability }
+            let runPort = groupDrives.contains { $0.checkPortAvailability }
+
             group.enter()
-            queue.async {
-                let result = self.check(drive, timeout: timeout)
-                lock.lock(); results[drive.id] = result; lock.unlock()
+            hostQueue.addOperation {
+                let hostResult = self.checkHost(
+                    host: host, port: port, isIP: isIP,
+                    runDNS: runDNS, runPing: runPing, runPort: runPort
+                )
+                lock.lock()
+                for drive in groupDrives {
+                    results[drive.id] = DriveAvailabilityResult(
+                        driveID:   drive.id,
+                        dns:       drive.checkDNSResolution    ? hostResult.dns       : .disabled,
+                        reachable: drive.checkHostReachability ? hostResult.reachable : .disabled,
+                        port:      drive.checkPortAvailability ? hostResult.port      : .disabled
+                    )
+                }
+                lock.unlock()
                 group.leave()
             }
         }
 
-        _ = group.wait(timeout: .now() + timeout)
+        _ = group.wait(timeout: .now() + Timeout.batch)
         return results
     }
 
-    private func check(_ drive: NetworkDrive, timeout: TimeInterval) -> DriveAvailabilityResult {
-        guard let parsed = URL(string: drive.url), let host = parsed.host else {
-            return DriveAvailabilityResult(driveID: drive.id, dns: .failed, reachable: .failed, port: .failed)
-        }
-        let portNumber = parsed.port ?? Self.defaultPort(for: parsed.scheme)
-        let isIP = Self.isIPAddress(host)
+    // MARK: - Per-host check
 
-        // DNS runs synchronously first; a failure short-circuits ping and port.
+    private func checkHost(host: String, port: Int?, isIP: Bool,
+                           runDNS: Bool, runPing: Bool, runPort: Bool) -> HostResult {
+        // Phase 1: DNS (200 ms cap, sequential).
+        // Failure short-circuits phases 2+; IP addresses skip DNS entirely.
         let dns: DriveAvailabilityResult.Status
-        if !drive.checkDNSResolution {
+        if !runDNS {
             dns = .disabled
         } else if isIP {
             dns = .skipped
         } else {
-            dns = Self.checkDNS(host: host) ? .passed : .failed
+            dns = Self.checkDNS(host: host, timeout: Timeout.dns) ? .passed : .failed
         }
 
-        let dnsBlocked = (dns == .failed)
+        guard dns != .failed else {
+            return HostResult(
+                dns:       dns,
+                reachable: runPing ? .skipped : .disabled,
+                port:      runPort ? .skipped : .disabled
+            )
+        }
 
-        var reachable: DriveAvailabilityResult.Status
-        if !drive.checkHostReachability  { reachable = .disabled }
-        else if dnsBlocked               { reachable = .skipped  }
-        else                             { reachable = .timedOut }
-
-        var port: DriveAvailabilityResult.Status
-        if !drive.checkPortAvailability || portNumber == nil { port = .disabled }
-        else if dnsBlocked                                   { port = .skipped  }
-        else                                                 { port = .timedOut }
+        // Phase 2: Reachability + port in parallel (0.8 s budget after DNS).
+        var reachable:  DriveAvailabilityResult.Status = runPing               ? .timedOut : .disabled
+        var portStatus: DriveAvailabilityResult.Status = (runPort && port != nil) ? .timedOut : .disabled
 
         let lock = NSLock()
-        let group = DispatchGroup()
+        let innerGroup = DispatchGroup()
 
-        if reachable == .timedOut {
-            group.enter()
-            queue.async {
-                let r: DriveAvailabilityResult.Status = Self.checkReachability(host: host) ? .passed : .failed
+        if runPing {
+            innerGroup.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let r: DriveAvailabilityResult.Status = Self.checkReachability() ? .passed : .failed
                 lock.lock(); reachable = r; lock.unlock()
-                group.leave()
+                innerGroup.leave()
             }
         }
 
-        if port == .timedOut, let p = portNumber {
-            group.enter()
-            queue.async {
-                let r: DriveAvailabilityResult.Status = Self.checkPort(host: host, port: p, timeout: timeout) ? .passed : .failed
-                lock.lock(); port = r; lock.unlock()
-                group.leave()
+        if runPort, let p = port {
+            innerGroup.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let r: DriveAvailabilityResult.Status = Self.checkPort(host: host, port: p) ? .passed : .failed
+                lock.lock(); portStatus = r; lock.unlock()
+                innerGroup.leave()
             }
         }
 
-        _ = group.wait(timeout: .now() + timeout)
+        _ = innerGroup.wait(timeout: .now() + Timeout.postDNS)
 
         lock.lock()
-        let result = DriveAvailabilityResult(driveID: drive.id, dns: dns, reachable: reachable, port: port)
+        let result = HostResult(dns: dns, reachable: reachable, port: portStatus)
         lock.unlock()
         return result
     }
 
-    // MARK: - Individual Checks
+    // MARK: - Individual checks
 
-    private static func checkDNS(host: String) -> Bool {
-        var hints = addrinfo()
-        hints.ai_family = AF_UNSPEC
-        hints.ai_socktype = SOCK_STREAM
-        var res: UnsafeMutablePointer<addrinfo>? = nil
-        let ret = getaddrinfo(host, nil, &hints, &res)
-        if ret == 0 { freeaddrinfo(res) }
-        return ret == 0
+    /// Resolves a hostname with a hard timeout. Returns false on timeout or failure.
+    /// getaddrinfo has no built-in timeout, so we dispatch it and cap the wait.
+    private static func checkDNS(host: String, timeout: TimeInterval) -> Bool {
+        let semaphore = DispatchSemaphore(value: 0)
+        var resolved = false
+        DispatchQueue.global(qos: .utility).async {
+            var hints = addrinfo()
+            hints.ai_family   = AF_UNSPEC
+            hints.ai_socktype = SOCK_STREAM
+            var res: UnsafeMutablePointer<addrinfo>? = nil
+            let ret = getaddrinfo(host, nil, &hints, &res)
+            if ret == 0 { freeaddrinfo(res) }
+            resolved = ret == 0
+            semaphore.signal()
+        }
+        return semaphore.wait(timeout: .now() + timeout) != .timedOut && resolved
     }
 
-    // NWPathMonitor fires its handler immediately with the current path on start,
-    // so the semaphore unblocks without waiting for a network event.
-    private static func checkReachability(host: String) -> Bool {
+    /// Checks general network reachability via NWPathMonitor.
+    /// Note: this reflects whether any network path exists, not host-specific reachability.
+    /// NWPathMonitor fires immediately with the current path, so the semaphore unblocks
+    /// without waiting for a network event.
+    private static func checkReachability() -> Bool {
         let monitor = NWPathMonitor()
         let semaphore = DispatchSemaphore(value: 0)
         var reachable = false
@@ -142,10 +204,10 @@ final class DriveAvailabilityChecker {
         return reachable
     }
 
-    /// Non-blocking TCP connect with poll()-based timeout.
-    private static func checkPort(host: String, port: Int, timeout: TimeInterval) -> Bool {
+    /// Non-blocking TCP connect with poll()-based 500 ms timeout.
+    private static func checkPort(host: String, port: Int) -> Bool {
         var hints = addrinfo()
-        hints.ai_family = AF_UNSPEC
+        hints.ai_family   = AF_UNSPEC
         hints.ai_socktype = SOCK_STREAM
         var res: UnsafeMutablePointer<addrinfo>? = nil
         guard getaddrinfo(host, String(port), &hints, &res) == 0, let addr = res else { return false }
@@ -163,7 +225,7 @@ final class DriveAvailabilityChecker {
         guard errno == EINPROGRESS else { return false }
 
         var pfd = pollfd(fd: sockfd, events: Int16(POLLOUT), revents: 0)
-        let ms = Int32(min(timeout * 1000, Double(Int32.max)))
+        let ms  = Int32(Timeout.tcp * 1000)
         guard poll(&pfd, 1, ms) > 0 else { return false }
 
         var sockErr: Int32 = 0
