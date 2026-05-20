@@ -34,6 +34,10 @@ struct NetworkDrive: Codable, Identifiable, Hashable {
     var checkDNSResolution: Bool
     var checkPortAvailability: Bool
 
+    var autoConnect: Bool
+    var autoConnectOnStartup: Bool
+    var autoConnectOnNetworkChange: Bool
+
     // Custom decode for backwards compatibility with stored drives that predate these fields.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -43,6 +47,9 @@ struct NetworkDrive: Codable, Identifiable, Hashable {
         checkHostReachability = try c.decodeIfPresent(Bool.self, forKey: .checkHostReachability) ?? false
         checkDNSResolution = try c.decodeIfPresent(Bool.self, forKey: .checkDNSResolution) ?? false
         checkPortAvailability = try c.decodeIfPresent(Bool.self, forKey: .checkPortAvailability) ?? false
+        autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? false
+        autoConnectOnStartup = try c.decodeIfPresent(Bool.self, forKey: .autoConnectOnStartup) ?? false
+        autoConnectOnNetworkChange = try c.decodeIfPresent(Bool.self, forKey: .autoConnectOnNetworkChange) ?? false
         // Infers from URL scheme for drives saved before this field existed.
         driveType = try c.decodeIfPresent(DriveType.self, forKey: .driveType) ?? DriveType.infer(from: url)
     }
@@ -50,7 +57,10 @@ struct NetworkDrive: Codable, Identifiable, Hashable {
     init(id: UUID, url: String, driveType: DriveType = .other, label: String?,
          checkHostReachability: Bool = false,
          checkDNSResolution: Bool = false,
-         checkPortAvailability: Bool = false) {
+         checkPortAvailability: Bool = false,
+         autoConnect: Bool = false,
+         autoConnectOnStartup: Bool = false,
+         autoConnectOnNetworkChange: Bool = false) {
         self.id = id
         self.url = url
         self.driveType = driveType
@@ -58,6 +68,9 @@ struct NetworkDrive: Codable, Identifiable, Hashable {
         self.checkHostReachability = checkHostReachability
         self.checkDNSResolution = checkDNSResolution
         self.checkPortAvailability = checkPortAvailability
+        self.autoConnect = autoConnect
+        self.autoConnectOnStartup = autoConnectOnStartup
+        self.autoConnectOnNetworkChange = autoConnectOnNetworkChange
     }
 
     var schemeLabel: String {

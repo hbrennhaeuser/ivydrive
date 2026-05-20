@@ -34,6 +34,10 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    func showConnected(_ driveName: String) {
+        show(title: "Drive Connected", body: "\(driveName) connected automatically.")
+    }
+
     func showEjected(_ volumeName: String) {
         show(title: "Volume Ejected", body: "\(volumeName) was ejected.")
     }

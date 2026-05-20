@@ -11,6 +11,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let menu = NSMenu()
     let driveManager = NetworkDriveManager()
     private let notificationManager = NotificationManager()
+    private lazy var autoConnectService = AutoConnectService(
+        driveManager: driveManager,
+        notificationManager: notificationManager
+    )
 
     private var preferencesWindow: NSWindow?
     private let preferencesViewModel = PreferencesViewModel()
@@ -44,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         notificationManager.configure()
         setupMainMenu()
         setupStatusItem()
+        autoConnectService.start()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             self?.notificationManager.requestAuthorizationIfNeeded()
@@ -456,6 +461,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func ejectVolume(named volumeName: String, at url: URL) {
+        if let drive = driveManager.drives.first(where: { driveManager.mountPoint(for: $0) == url }) {
+            autoConnectService.suppressAutoConnect(for: drive.id)
+        }
         activeOperations[url.absoluteString] = .ejecting
         FileManager.default.unmountVolume(
             at: url,

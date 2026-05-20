@@ -75,6 +75,21 @@ final class NetworkDriveManager: ObservableObject {
 
     // MARK: - Mount
 
+    /// Mounts without interactive fallback. Suitable for background autoconnect attempts.
+    func mountSilently(_ drive: NetworkDrive, completion: @escaping (DriveMountOutcome) -> Void) {
+        guard let url = URL(string: drive.url) else {
+            completion(.failed("Invalid drive URL."))
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            var mountPoints: Unmanaged<CFArray>?
+            let status = NetFSMountURLSync(url as CFURL, nil, nil, nil, nil, nil, &mountPoints)
+            DispatchQueue.main.async {
+                completion(status == 0 ? .mounted : .failed("NetFS status \(status)"))
+            }
+        }
+    }
+
     func mount(_ drive: NetworkDrive, completion: @escaping (DriveMountOutcome) -> Void) {
         guard let url = URL(string: drive.url) else {
             completion(.failed("Invalid drive URL."))

@@ -22,6 +22,9 @@ struct DriveFormView: View {
     @State private var checkHostReachability = false
     @State private var checkDNSResolution = false
     @State private var checkPortAvailability = false
+    @State private var autoConnect = false
+    @State private var autoConnectOnStartup = false
+    @State private var autoConnectOnNetworkChange = false
     @State private var advancedExpanded = false
 
     private var isEditing: Bool { drive != nil }
@@ -61,12 +64,23 @@ struct DriveFormView: View {
                             Text("Autoconnect")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
-                            Text("Autoconnect coming soon.")
-                                .foregroundStyle(.tertiary)
-                                .italic()
+                            Toggle("Automatically connect this drive", isOn: $autoConnect)
+                                .onChange(of: autoConnect) { _, enabled in
+                                    if !enabled {
+                                        autoConnectOnStartup = false
+                                        autoConnectOnNetworkChange = false
+                                    }
+                                }
+                            Toggle("On app startup", isOn: $autoConnectOnStartup)
+                                .disabled(!autoConnect)
+                                .padding(.leading, 16)
+                            Toggle("On network change", isOn: $autoConnectOnNetworkChange)
+                                .disabled(!autoConnect)
+                                .padding(.leading, 16)
                             Text("Availability Checks")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
+                                .padding(.top, 4)
                             Toggle("Check host reachability", isOn: $checkHostReachability)
                             Toggle("Check DNS resolution", isOn: $checkDNSResolution)
                             Toggle("Check port availability", isOn: $checkPortAvailability)
@@ -174,7 +188,11 @@ struct DriveFormView: View {
         checkHostReachability = drive.checkHostReachability
         checkDNSResolution = drive.checkDNSResolution
         checkPortAvailability = drive.checkPortAvailability
-        if drive.checkHostReachability || drive.checkDNSResolution || drive.checkPortAvailability {
+        autoConnect = drive.autoConnect
+        autoConnectOnStartup = drive.autoConnectOnStartup
+        autoConnectOnNetworkChange = drive.autoConnectOnNetworkChange
+        if drive.checkHostReachability || drive.checkDNSResolution || drive.checkPortAvailability
+            || drive.autoConnect {
             advancedExpanded = true
         }
 
@@ -213,6 +231,9 @@ struct DriveFormView: View {
             existing.checkHostReachability  = checkHostReachability
             existing.checkDNSResolution     = checkDNSResolution
             existing.checkPortAvailability  = checkPortAvailability
+            existing.autoConnect            = autoConnect
+            existing.autoConnectOnStartup   = autoConnectOnStartup
+            existing.autoConnectOnNetworkChange = autoConnectOnNetworkChange
             manager.update(existing)
         } else {
             manager.add(NetworkDrive(
@@ -222,7 +243,10 @@ struct DriveFormView: View {
                 label: trimmedLabel.isEmpty ? nil : trimmedLabel,
                 checkHostReachability: checkHostReachability,
                 checkDNSResolution: checkDNSResolution,
-                checkPortAvailability: checkPortAvailability
+                checkPortAvailability: checkPortAvailability,
+                autoConnect: autoConnect,
+                autoConnectOnStartup: autoConnectOnStartup,
+                autoConnectOnNetworkChange: autoConnectOnNetworkChange
             ))
         }
         dismiss()
