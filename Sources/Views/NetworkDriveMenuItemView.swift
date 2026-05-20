@@ -1,6 +1,10 @@
 import Cocoa
 
 private final class StatusBubbleView: NSView {
+    func setFillColor(_ color: NSColor) {
+        layer?.backgroundColor = color.cgColor
+    }
+
     init(fillColor: NSColor) {
         super.init(frame: .zero)
         wantsLayer = true
@@ -265,5 +269,23 @@ final class NetworkDriveMenuItemView: NSView {
         bubbleView.alphaValue = 0
         spinner.isHidden = false
         spinner.startAnimation(nil)
+    }
+
+    func updateAvailability(_ result: DriveAvailabilityResult) {
+        guard !isConnected, !isInProgress else { return }
+        let allDisabled = [result.dns, result.reachable, result.port]
+            .allSatisfy { $0 == .disabled || $0 == .skipped }
+        let fillColor: NSColor
+        if allDisabled {
+            fillColor = NSColor.labelColor.withAlphaComponent(0.25)
+        } else if result.dotIsTeal {
+            fillColor = .systemBlue
+        } else {
+            fillColor = .systemRed
+        }
+        bubbleView.setFillColor(fillColor)
+        bubbleView.alphaValue = 1
+        spinner.stopAnimation(nil)
+        spinner.isHidden = true
     }
 }

@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var cachedAvailability: [UUID: DriveAvailabilityResult] = [:]
     private var isCheckingAvailability = false
+    private var liveAvailabilityViews: [UUID: NetworkDriveMenuItemView] = [:]
 
     // MARK: - App Lifecycle
 
@@ -129,6 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func rebuildMenu() {
         menu.removeAllItems()
+        liveAvailabilityViews = [:]
         buildNetworkDrivesSection(in: menu, availability: cachedAvailability, isChecking: isCheckingAvailability)
         menu.addItem(.separator())
         buildEjectableVolumesSection(in: menu)
@@ -142,7 +144,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             self.cachedAvailability = results
             self.isCheckingAvailability = false
-            if self.isMenuOpen { self.rebuildMenu() }
+            for (id, result) in results {
+                self.liveAvailabilityViews[id]?.updateAvailability(result)
+            }
         }
     }
 
@@ -253,6 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.connectDrive(drive)
         }
         item.view = view
+        if !mounted { liveAvailabilityViews[drive.id] = view }
         menu.addItem(item)
     }
 
