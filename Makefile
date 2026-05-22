@@ -18,8 +18,9 @@ FRAMEWORKS := -framework Cocoa \
 			  -framework Network \
 			  -framework ServiceManagement
 
-BINARY := $(MACOS_DIR)/$(APP_NAME)
-PLIST := $(CONTENTS)/Info.plist
+BINARY  := $(MACOS_DIR)/$(APP_NAME)
+PLIST   := $(CONTENTS)/Info.plist
+ICON    := $(CONTENTS)/Resources/AppIcon.icns
 VERSION      := $(shell /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Resources/Info.plist 2>/dev/null || echo '0.0.0')
 DMG          := $(BUILD_DIR)/$(APP_NAME)-$(VERSION).dmg
 DMG_VOL_NAME := $(APP_NAME) $(VERSION)
@@ -32,10 +33,15 @@ $(BINARY): $(SOURCES)
 	@mkdir -p "$(@D)"
 	$(SWIFTC) $(SWIFT_FLAGS) $(SOURCES) $(FRAMEWORKS) -o "$@"
 
-$(PLIST): Resources/Info.plist
+# Depends on $(BINARY) and $(ICON) so signing always runs after any content change
+$(PLIST): Resources/Info.plist $(BINARY) $(ICON)
+	@mkdir -p "$(@D)"
+	@cp Resources/Info.plist "$@"
+	@codesign --sign - --force --deep "$(APP_BUNDLE)"
+
+$(ICON): Resources/AppIcon.icns
 	@mkdir -p "$(@D)"
 	@cp "$<" "$@"
-	@codesign --sign - --force --deep "$(APP_BUNDLE)"
 
 dmg: all
 	@rm -f "$(DMG)"
