@@ -26,8 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var cachedAvailability: [UUID: DriveAvailabilityResult] = [:]
     private var isCheckingAvailability = false
     private var liveAvailabilityViews: [UUID: NetworkDriveMenuItemView] = [:]
-    private var lastCheckTime: Date?
-    private let cacheTTL: TimeInterval = 60
+    private var driveCheckTimes: [UUID: Date] = [:]
+    private let normalRefreshInterval: TimeInterval  = 30   // clean result
+    private let problemRefreshInterval: TimeInterval = 5    // failed / timedOut result
+    private var refreshTimer: Timer?
 
     // MARK: - App Lifecycle
 
@@ -133,10 +135,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         isMenuOpen = true
         rebuildMenu()
+        let t = Timer(timeInterval: 5.0, repeats: true) { [weak self] _ in
+            self?.refreshAvailabilityIfNeeded()
+        }
+        RunLoop.main.add(t, forMode: .common)
+        refreshTimer = t
     }
 
     func menuDidClose(_ menu: NSMenu) {
         isMenuOpen = false
+        refreshTimer?.invalidate()
+        refreshTimer = nil
         DriveInfoPanel.shared.hide()
     }
 
@@ -152,14 +161,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let unmounted = driveManager.drives.filter { !driveManager.isMounted($0) }
         guard !unmounted.isEmpty else { return }
 
-        if let last = lastCheckTime, Date().timeIntervalSince(last) < cacheTTL,
-           unmounted.allSatisfy({ cachedAvailability[$0.id] != nil }) {
-            return
-        }
-
         let uncached = unmounted.filter { cachedAvailability[$0.id] == nil }
-        let toCheck  = uncached.isEmpty ? unmounted : uncached
-        startAvailabilityCheck(for: toCheck)
+        guard !uncached.isEmpty else { return }
+        startAvailabilityCheck(for: uncached)
     }
 
     private func startAvailabilityCheck(for drives: [NetworkDrive]) {
@@ -168,7 +172,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         DriveAvailabilityChecker.shared.checkAllAsync(drives) { [weak self] results in
             guard let self else { return }
             self.cachedAvailability.merge(results) { _, new in new }
-            self.lastCheckTime = Date()
+            let now = Date()
+            for id in results.keys { self.driveCheckTimes[id] = now }
             self.isCheckingAvailability = false
             for (id, result) in results {
                 self.liveAvailabilityViews[id]?.updateAvailability(result)
@@ -181,6 +186,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.startAvailabilityCheck(for: stillUncached)
             }
         }
+    }
+
+    private func refreshAvailabilityIfNeeded() {
+        guard isMenuOpen else { return }
+        let now = Date()
+        let unmounted = driveManager.drives.filter { !driveManager.isMounted($0) }
+        let toRefresh = unmounted.filter { drive in
+            guard let last = driveCheckTimes[drive.id] else { return false }
+            let result = cachedAvailability[drive.id]
+            let hasProblem = result.map { r in
+                [r.dns, r.reachable, r.port].contains { $0 == .failed || $0 == .timedOut }
+            } ?? false
+            let interval = hasProblem ? problemRefreshInterval : normalRefreshInterval
+            return now.timeIntervalSince(last) >= interval
+        }
+        guard !toRefresh.isEmpty else { return }
+        startAvailabilityCheck(for: toRefresh)
     }
 
     // MARK: - Menu Sections
@@ -277,6 +299,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         isChecking: Bool = false
     ) {
         let item = NSMenuItem()
+        let statusProvider: (() -> (refreshIn: Int?, isRefreshing: Bool, autoConnectIn: Int?))? = mounted ? nil : { [weak self] in
+            guard let self else { return (nil, false, nil) }
+            var refreshIn: Int? = nil
+            var isRefreshing = false
+            if let last = self.driveCheckTimes[drive.id] {
+                let result = self.cachedAvailability[drive.id]
+                let hasProblem = result.map { r in
+                    [r.dns, r.reachable, r.port].contains { $0 == .failed || $0 == .timedOut }
+                } ?? false
+                let interval = hasProblem ? self.problemRefreshInterval : self.normalRefreshInterval
+                let remaining = interval - Date().timeIntervalSince(last)
+                if remaining > 0 {
+                    refreshIn = Int(remaining.rounded(.up))
+                } else {
+                    isRefreshing = true
+                }
+            } else {
+                isRefreshing = self.isCheckingAvailability
+            }
+            var autoConnectIn: Int? = nil
+            if drive.autoConnect, let fireTime = self.autoConnectService.pendingFireTime {
+                let remaining = fireTime.timeIntervalSince(Date())
+                if remaining > 0 { autoConnectIn = Int(remaining.rounded(.up)) }
+            }
+            return (refreshIn, isRefreshing, autoConnectIn)
+        }
         let view = NetworkDriveMenuItemView(
             drive: drive,
             connected: mounted,
@@ -285,7 +333,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             operation: activeOperations[drive.id],
             indented: indented,
             showAccentBar: accented,
-            isCheckingAvailability: isChecking && !mounted
+            isCheckingAvailability: isChecking && !mounted,
+            statusProvider: statusProvider
         ) { [weak self] in
             self?.connectDrive(drive)
         }

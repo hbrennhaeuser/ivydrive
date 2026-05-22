@@ -12,6 +12,9 @@ final class AutoConnectService {
     // Cancelled and replaced on each new trigger; ensures at most one pending attempt.
     private var pendingWork: DispatchWorkItem?
 
+    /// Absolute time when the pending autoconnect will fire. Nil when idle.
+    private(set) var pendingFireTime: Date?
+
     // Drive IDs recently ejected by the user; autoconnect is suppressed for 5 minutes.
     private var suppressedIDs: Set<UUID> = []
 
@@ -21,7 +24,7 @@ final class AutoConnectService {
     }
 
     func start() {
-        schedule(delay: 30, trigger: .startup)
+        schedule(delay: 15, trigger: .startup)
 
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
@@ -32,7 +35,7 @@ final class AutoConnectService {
                   let prev = self.previousPath,
                   path != prev else { return }
             DispatchQueue.main.async {
-                self.schedule(delay: 10, trigger: .networkChange)
+                self.schedule(delay: 3, trigger: .networkChange)
             }
         }
         monitor.start(queue: monitorQueue)
@@ -52,7 +55,9 @@ final class AutoConnectService {
 
     private func schedule(delay: TimeInterval, trigger: Trigger) {
         pendingWork?.cancel()
+        pendingFireTime = Date().addingTimeInterval(delay)
         let work = DispatchWorkItem { [weak self] in
+            self?.pendingFireTime = nil
             self?.runAutoConnect(trigger: trigger)
         }
         pendingWork = work

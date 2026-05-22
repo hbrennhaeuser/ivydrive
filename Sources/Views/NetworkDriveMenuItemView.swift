@@ -113,12 +113,14 @@ final class NetworkDriveMenuItemView: NSView {
     private let isConnected: Bool
     private var isInProgress: Bool
     private let mountPoint: URL?
-    private let availability: DriveAvailabilityResult?
+    private var availability: DriveAvailabilityResult?
     private let showAccentBar: Bool
     private let indented: Bool
     private let onAction: () -> Void
+    private let statusProvider: (() -> (refreshIn: Int?, isRefreshing: Bool, autoConnectIn: Int?))?
     private var isHovered = false
     private var trackingArea: NSTrackingArea?
+    private var hoverTimer: Timer?
 
     init(
         drive: NetworkDrive,
@@ -129,6 +131,7 @@ final class NetworkDriveMenuItemView: NSView {
         indented: Bool = false,
         showAccentBar: Bool = false,
         isCheckingAvailability: Bool = false,
+        statusProvider: (() -> (refreshIn: Int?, isRefreshing: Bool, autoConnectIn: Int?))? = nil,
         onAction: @escaping () -> Void
     ) {
         self.drive = drive
@@ -138,6 +141,7 @@ final class NetworkDriveMenuItemView: NSView {
         self.availability = availability
         self.showAccentBar = showAccentBar
         self.indented = indented
+        self.statusProvider = statusProvider
         self.onAction = onAction
 
         let fillColor: NSColor
@@ -247,15 +251,34 @@ final class NetworkDriveMenuItemView: NSView {
                 }
             }
         } else {
-            let rows = DriveInfoPanel.rowsForUnmountedDrive(drive, availability: availability)
-            DriveInfoPanel.shared.show(rows: rows, anchoredTo: self)
+            showInfoPanel()
+            let t = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
+                self?.showInfoPanel()
+            }
+            RunLoop.main.add(t, forMode: .common)
+            hoverTimer = t
         }
     }
 
     override func mouseExited(with event: NSEvent) {
         isHovered = false
         needsDisplay = true
+        hoverTimer?.invalidate()
+        hoverTimer = nil
         DriveInfoPanel.shared.hide()
+    }
+
+    private func showInfoPanel() {
+        var rows = DriveInfoPanel.rowsForUnmountedDrive(drive, availability: availability)
+        if let status = statusProvider?() {
+            if status.isRefreshing {
+                rows.append(("Refreshing", "refreshing…"))
+            } else if let s = status.refreshIn {
+                rows.append(("Refresh in", "\(s)s"))
+            }
+            if let s = status.autoConnectIn { rows.append(("Autoconnect in", "\(s)s")) }
+        }
+        DriveInfoPanel.shared.show(rows: rows, anchoredTo: self)
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -273,6 +296,7 @@ final class NetworkDriveMenuItemView: NSView {
 
     func updateAvailability(_ result: DriveAvailabilityResult) {
         guard !isConnected, !isInProgress else { return }
+        availability = result
         let allDisabled = [result.dns, result.reachable, result.port]
             .allSatisfy { $0 == .disabled || $0 == .skipped }
         let fillColor: NSColor
@@ -287,5 +311,6 @@ final class NetworkDriveMenuItemView: NSView {
         bubbleView.alphaValue = 1
         spinner.stopAnimation(nil)
         spinner.isHidden = true
+        if isHovered { showInfoPanel() }
     }
 }

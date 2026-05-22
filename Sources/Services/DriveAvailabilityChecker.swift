@@ -31,10 +31,10 @@ final class DriveAvailabilityChecker {
     }()
 
     private enum Timeout {
-        static let dns:     TimeInterval = 0.2   // getaddrinfo cap
-        static let tcp:     TimeInterval = 0.5   // non-blocking connect poll
-        static let postDNS: TimeInterval = 0.8   // reachability + port budget
-        static let batch:   TimeInterval = 1.0   // whole checkAll wall-clock cap
+        static let dns:     TimeInterval = 0.3   // getaddrinfo cap
+        static let tcp:     TimeInterval = 1.5   // non-blocking connect poll
+        static let postDNS: TimeInterval = 2.0   // reachability + port budget
+        static let batch:   TimeInterval = 2.5   // whole checkAll wall-clock cap
     }
 
     private struct HostResult {
