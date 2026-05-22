@@ -48,32 +48,32 @@ private struct NetworkDrivesTab: View {
     @State private var showAddSheet = false
     @State private var editingDrive: NetworkDrive?
     @State private var selection: UUID?
+    @State private var eventMonitor: Any?
+
+    private var groupedDrives: [(host: String, drives: [NetworkDrive])] {
+        var groups: [String: [NetworkDrive]] = [:]
+        for drive in manager.drives {
+            groups[drive.hostGroupKey, default: []].append(drive)
+        }
+        return groups
+            .map { key, drives in
+                let host = URL(string: key)?.host ?? key
+                let sorted = drives.sorted {
+                    $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+                }
+                return (host, sorted)
+            }
+            .sorted { $0.host.localizedStandardCompare($1.host) == .orderedAscending }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             List(selection: $selection) {
-                ForEach(manager.drives) { drive in
-                    HStack(spacing: 10) {
-                        Text(drive.schemeLabel)
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                            .fixedSize()
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(drive.displayName)
-                                .fontWeight(.medium)
-                            Text(drive.url)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                ForEach(groupedDrives, id: \.host) { group in
+                    Section(group.host) {
+                        ForEach(group.drives) { drive in
+                            driveRow(drive)
                         }
-                        Spacer()
-                    }
-                    .tag(drive.id)
-                    .contextMenu {
-                        Button("Edit") { editingDrive = drive }
-                        Button("Remove") { manager.remove(drive) }
                     }
                 }
             }
@@ -101,11 +101,51 @@ private struct NetworkDrivesTab: View {
             }
             .padding(8)
         }
+        .onAppear {
+            eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+                guard event.clickCount == 2,
+                      let id = selection,
+                      let drive = manager.drives.first(where: { $0.id == id })
+                else { return event }
+                DispatchQueue.main.async { editingDrive = drive }
+                return event
+            }
+        }
+        .onDisappear {
+            if let m = eventMonitor { NSEvent.removeMonitor(m) }
+            eventMonitor = nil
+        }
         .sheet(isPresented: $showAddSheet) {
             DriveFormView(manager: manager, drive: nil)
         }
         .sheet(item: $editingDrive) { drive in
             DriveFormView(manager: manager, drive: drive)
+        }
+    }
+
+    @ViewBuilder
+    private func driveRow(_ drive: NetworkDrive) -> some View {
+        HStack(spacing: 10) {
+            Text(drive.schemeLabel)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .fixedSize()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(drive.displayName)
+                    .fontWeight(.medium)
+                Text(drive.url)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .tag(drive.id)
+        .contextMenu {
+            Button("Edit") { editingDrive = drive }
+            Button("Remove") { manager.remove(drive) }
         }
     }
 
