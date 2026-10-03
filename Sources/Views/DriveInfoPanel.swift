@@ -90,7 +90,7 @@ extension DriveInfoPanel {
         let scheme = parsedURL?.scheme?.uppercased() ?? "—"
 
         var rows: [(String, String)] = [
-            ("URL", drive.url),
+            ("Address", drive.url),
             ("Type", scheme),
         ]
 
@@ -98,7 +98,7 @@ extension DriveInfoPanel {
             rows.append(("DNS", statusLabel(availability?.dns)))
         }
         if drive.checkHostReachability {
-            rows.append(("Ping", statusLabel(availability?.reachable)))
+            rows.append(("Reachability", statusLabel(availability?.reachable)))
         }
         if drive.checkPortAvailability {
             rows.append(("Port", statusLabel(availability?.port)))
@@ -161,7 +161,7 @@ extension DriveInfoPanel {
             rows.append(("Name", name))
         }
         if let remount = values.volumeURLForRemounting {
-            rows.append(("Mount URL", remount.absoluteString))
+            rows.append(("Server Address", remount.absoluteString))
         }
         if let fsType = values.volumeLocalizedFormatDescription {
             rows.append(("Type", fsType))

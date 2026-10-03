@@ -31,7 +31,7 @@ struct DriveFormView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(isEditing ? "Edit Network Drive" : "Add Network Drive")
+            Text(isEditing ? "Edit Server" : "Add Server")
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.bottom, 4)
@@ -55,7 +55,7 @@ struct DriveFormView: View {
 
                 Section("Display") {
                     TextField("Display Name", text: $label,
-                              prompt: Text("Optional — defaults to host/share"))
+                              prompt: Text("Optional — defaults to server/share"))
                 }
 
                 Section(
@@ -64,7 +64,7 @@ struct DriveFormView: View {
                             Text("Autoconnect")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
-                            Toggle("Automatically connect this drive", isOn: $autoConnect)
+                            Toggle("Automatically connect this server", isOn: $autoConnect)
                                 .onChange(of: autoConnect) { _, enabled in
                                     if !enabled {
                                         autoConnectOnStartup = false
@@ -122,26 +122,26 @@ struct DriveFormView: View {
     private var typeSpecificFields: some View {
         switch driveType {
         case .smb:
-            TextField("Host", text: $host, prompt: Text("server.local"))
+            TextField("Server", text: $host, prompt: Text("server.local"))
             TextField("Share", text: $share, prompt: Text("ShareName"))
             TextField("Port", text: $port, prompt: Text("445 (optional)"))
         case .nfs:
-            TextField("Host", text: $host, prompt: Text("server.local"))
+            TextField("Server", text: $host, prompt: Text("server.local"))
             TextField("Export Path", text: $exportPath, prompt: Text("/exports/data"))
             TextField("Port", text: $port, prompt: Text("2049 (optional)"))
         case .ftp:
-            TextField("Host", text: $host, prompt: Text("ftp.server.com"))
+            TextField("Server", text: $host, prompt: Text("ftp.server.com"))
             TextField("Username", text: $ftpUser, prompt: Text("anonymous (optional)"))
             TextField("Path", text: $ftpPath, prompt: Text("/pub (optional)"))
             TextField("Port", text: $port, prompt: Text("21 (optional)"))
         case .afp:
-            TextField("Host", text: $host, prompt: Text("server.local"))
+            TextField("Server", text: $host, prompt: Text("server.local"))
             TextField("Share", text: $share, prompt: Text("ShareName (optional)"))
             TextField("Port", text: $port, prompt: Text("548 (optional)"))
         case .other:
-            TextField("URI", text: $rawURL, prompt: Text("smb://server/share"))
+            TextField("Server Address", text: $rawURL, prompt: Text("smb://server/share"))
             if rawURLContainsPassword {
-                Text("Remove the password from the URI. macOS asks for credentials when connecting and stores them in the Keychain.")
+                Text("Remove the password from the server address. macOS asks for credentials when connecting and stores them in the Keychain.")
                     .font(.caption)
                     .foregroundStyle(.red)
             }

@@ -77,8 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ud.set(true, forKey: "didAskAboutLoginItem")
 
         let alert = NSAlert()
-        alert.messageText = "Start MenuBarFS at Login?"
-        alert.informativeText = "Would you like MenuBarFS to launch automatically when you log in? You can change this later in Preferences → Maintenance."
+        alert.messageText = "Open MenuBarFS When You Log In?"
+        alert.informativeText = "Would you like MenuBarFS to open automatically when you log in? You can change this later in Settings > Maintenance."
         alert.addButton(withTitle: "Enable")
         alert.addButton(withTitle: "Not Now")
         alert.alertStyle = .informational
@@ -263,7 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let allDrives = driveManager.drives
 
         if allDrives.isEmpty {
-            let item = NSMenuItem(title: "No network drives configured", action: nil, keyEquivalent: "")
+            let item = NSMenuItem(title: "No servers saved", action: nil, keyEquivalent: "")
             item.isEnabled = false
             menu.addItem(item)
             return
@@ -280,7 +280,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 added = true
             }
             if !added {
-                let item = NSMenuItem(title: "All drives connected", action: nil, keyEquivalent: "")
+                let item = NSMenuItem(title: "All servers connected", action: nil, keyEquivalent: "")
                 item.isEnabled = false
                 menu.addItem(item)
             }
@@ -332,7 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         if !addedAny {
-            let item = NSMenuItem(title: "All drives connected", action: nil, keyEquivalent: "")
+            let item = NSMenuItem(title: "All servers connected", action: nil, keyEquivalent: "")
             item.isEnabled = false
             menu.addItem(item)
         }
@@ -461,7 +461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // the volume is mounted but the network is unreachable.
             icon = NSImage(
                 systemSymbolName: "externaldrive.connected.to.line.below",
-                accessibilityDescription: "Network Drive"
+                accessibilityDescription: "Server"
             ) ?? NSImage()
         } else {
             icon = NSWorkspace.shared.icon(forFile: volume.path)
@@ -486,7 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func buildAppSection(in menu: NSMenu) {
         let prefsItem = NSMenuItem(
-            title: "Preferences\u{2026}",
+            title: "Settings\u{2026}",
             action: #selector(showPreferences),
             keyEquivalent: ","
         )
@@ -564,7 +564,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "MenuBarFS Preferences"
+            window.title = "MenuBarFS Settings"
             window.contentView = NSHostingView(rootView: view)
             window.isReleasedWhenClosed = false
             preferencesWindow = window

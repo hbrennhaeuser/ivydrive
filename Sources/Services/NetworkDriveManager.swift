@@ -78,7 +78,7 @@ final class NetworkDriveManager: ObservableObject {
     /// Mounts without interactive fallback. Suitable for background autoconnect attempts.
     func mountSilently(_ drive: NetworkDrive, completion: @escaping (DriveMountOutcome) -> Void) {
         guard let url = URL(string: drive.url) else {
-            completion(.failed("Invalid drive URL."))
+            completion(.failed("Invalid server address."))
             return
         }
         DispatchQueue.global(qos: .userInitiated).async {
@@ -92,7 +92,7 @@ final class NetworkDriveManager: ObservableObject {
 
     func mount(_ drive: NetworkDrive, completion: @escaping (DriveMountOutcome) -> Void) {
         guard let url = URL(string: drive.url) else {
-            completion(.failed("Invalid drive URL."))
+            completion(.failed("Invalid server address."))
             return
         }
 

@@ -9,7 +9,7 @@ enum DriveType: String, Codable, CaseIterable {
         case .nfs:   return "NFS"
         case .ftp:   return "FTP"
         case .afp:   return "AFP (Apple)"
-        case .other: return "Other / URI"
+        case .other: return "Other"
         }
     }
 

@@ -13,7 +13,7 @@ struct PreferencesView: View {
         TabView(selection: $viewModel.selectedTab) {
             NetworkDrivesTab(manager: manager)
                 .tabItem {
-                    Label("Network Drives", systemImage: "externaldrive.connected.to.line.below")
+                    Label("Servers", systemImage: "externaldrive.connected.to.line.below")
                 }
                 .tag(0)
             AppearanceTab()
@@ -198,11 +198,11 @@ private struct GeneralTab: View {
 
     var body: some View {
         Form {
-            Section("Network Drive List") {
-                Toggle("Group drives by host", isOn: $groupDrivesByHost)
+            Section("Server List") {
+                Toggle("Group by server", isOn: $groupDrivesByHost)
                 Toggle("Click group header to connect all", isOn: $clickGroupToConnectAll)
                     .disabled(!groupDrivesByHost)
-                Toggle("Hide connected drives from available list", isOn: $hideConnectedFromAvailable)
+                Toggle("Hide connected servers from available list", isOn: $hideConnectedFromAvailable)
                 Toggle("Hide local drives from connected list", isOn: $hideLocalDrives)
             }
             Section("Connected Drives") {
@@ -226,7 +226,7 @@ private struct MaintenanceTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Launch at login", isOn: $loginItemEnabled)
+                Toggle("Open at login", isOn: $loginItemEnabled)
                     .onChange(of: loginItemEnabled) { _, enabled in
                         if enabled {
                             try? SMAppService.mainApp.register()
@@ -237,7 +237,7 @@ private struct MaintenanceTab: View {
             } header: {
                 Text("Startup")
             } footer: {
-                Text("Automatically start MenuBarFS when you log in. You can also manage this in System Settings → General → Login Items.")
+                Text("Automatically open MenuBarFS when you log in. You can also manage this in System Settings > General > Login Items.")
                     .foregroundStyle(.secondary)
             }
             Section {
@@ -247,7 +247,7 @@ private struct MaintenanceTab: View {
             } header: {
                 Text("Data Management")
             } footer: {
-                Text("Removes all preferences and saved drives. The app will quit immediately.")
+                Text("Removes all settings and saved servers. The app will quit immediately.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -269,7 +269,7 @@ private struct MaintenanceTab: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("All settings and saved drives will be permanently deleted. This cannot be undone.")
+            Text("All settings and saved servers will be permanently deleted. This cannot be undone.")
         }
     }
 }
