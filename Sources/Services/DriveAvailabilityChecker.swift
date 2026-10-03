@@ -141,7 +141,7 @@ final class DriveAvailabilityChecker {
 
     private func checkHost(host: String, port: Int?, isIP: Bool,
                            runDNS: Bool, runPing: Bool, runPort: Bool) -> HostResult {
-        // Phase 1: DNS (200 ms cap, sequential).
+        // Phase 1: DNS (capped by Timeout.dns, sequential).
         // Failure short-circuits phases 2+; IP addresses skip DNS entirely.
         let dns: DriveAvailabilityResult.Status
         if !runDNS {
@@ -160,7 +160,7 @@ final class DriveAvailabilityChecker {
             )
         }
 
-        // Phase 2: Reachability + port in parallel (0.8 s budget after DNS).
+        // Phase 2: Reachability + port in parallel (Timeout.postDNS budget after DNS).
         var reachable:  DriveAvailabilityResult.Status = runPing               ? .timedOut : .disabled
         var portStatus: DriveAvailabilityResult.Status = (runPort && port != nil) ? .timedOut : .disabled
 
@@ -234,7 +234,7 @@ final class DriveAvailabilityChecker {
         return reachable
     }
 
-    /// Non-blocking TCP connect with poll()-based 500 ms timeout.
+    /// Non-blocking TCP connect with a poll()-based Timeout.tcp timeout.
     private static func checkPort(host: String, port: Int) -> Bool {
         var hints = addrinfo()
         hints.ai_family   = AF_UNSPEC
