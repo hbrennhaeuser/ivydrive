@@ -37,6 +37,10 @@ MenuBarFS does not store passwords. When a share requires authentication, macOS 
 
 The architecture defaults to `arm64` and can be overridden with `make ARCH=x86_64`. The deployment target is read from `LSMinimumSystemVersion` in `Resources/Info.plist`.
 
+## Releases
+
+The `build` GitHub Actions workflow is started manually and attaches the disk image to the run as an artifact. Releases are created manually on GitHub with the disk image from that run.
+
 ## Install
 
 Builds are ad-hoc signed and not notarized. When the app is opened from a downloaded disk image, Gatekeeper blocks it on first launch. Allow it via System Settings → Privacy & Security → Open Anyway, or remove the quarantine flag:
