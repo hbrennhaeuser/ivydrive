@@ -201,9 +201,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
 
             _ = group.wait(timeout: .now() + 5.0)
+            lock.lock()
+            let snapshot = results
+            lock.unlock()
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.cachedCapacities = results
+                self.cachedCapacities = snapshot
                 if self.isMenuOpen { self.rebuildMenu() }
             }
         }

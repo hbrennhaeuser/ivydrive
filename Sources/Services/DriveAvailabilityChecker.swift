@@ -77,7 +77,14 @@ final class DriveAvailabilityChecker {
         for (_, groupDrives) in groups {
             guard let first   = groupDrives.first,
                   let parsed  = URL(string: first.url),
-                  let host    = parsed.host else { continue }
+                  let host    = parsed.host else {
+                lock.lock()
+                for drive in groupDrives {
+                    results[drive.id] = Self.result(for: drive, status: .failed)
+                }
+                lock.unlock()
+                continue
+            }
 
             let port    = parsed.port ?? Self.defaultPort(for: parsed.scheme)
             let isIP    = Self.isIPAddress(host)
@@ -107,7 +114,27 @@ final class DriveAvailabilityChecker {
         }
 
         _ = group.wait(timeout: .now() + Timeout.batch)
-        return results
+
+        // Operations still running after the timeout keep writing to `results`,
+        // so the snapshot must be taken under the lock.
+        lock.lock()
+        var snapshot = results
+        lock.unlock()
+
+        // Every requested drive gets a result so callers can clear their refresh state.
+        for drive in drives where snapshot[drive.id] == nil {
+            snapshot[drive.id] = Self.result(for: drive, status: .timedOut)
+        }
+        return snapshot
+    }
+
+    private static func result(for drive: NetworkDrive, status: DriveAvailabilityResult.Status) -> DriveAvailabilityResult {
+        DriveAvailabilityResult(
+            driveID:   drive.id,
+            dns:       drive.checkDNSResolution    ? status : .disabled,
+            reachable: drive.checkHostReachability ? status : .disabled,
+            port:      drive.checkPortAvailability ? status : .disabled
+        )
     }
 
     // MARK: - Per-host check
@@ -200,7 +227,10 @@ final class DriveAvailabilityChecker {
             semaphore.signal()
         }
         monitor.start(queue: .global())
-        semaphore.wait()
+        guard semaphore.wait(timeout: .now() + Timeout.postDNS) != .timedOut else {
+            monitor.cancel()
+            return false
+        }
         return reachable
     }
 
