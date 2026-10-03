@@ -140,40 +140,66 @@ struct DriveFormView: View {
             TextField("Port", text: $port, prompt: Text("548 (optional)"))
         case .other:
             TextField("URI", text: $rawURL, prompt: Text("smb://server/share"))
+            if rawURLContainsPassword {
+                Text("Remove the password from the URI. macOS asks for credentials when connecting and stores them in the Keychain.")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
         }
     }
 
     private var isValid: Bool {
         switch driveType {
-        case .smb:          return !host.isEmpty && !share.isEmpty
-        case .nfs:          return !host.isEmpty && !exportPath.isEmpty
-        case .ftp, .afp:    return !host.isEmpty
-        case .other:        return !rawURL.trimmingCharacters(in: .whitespaces).isEmpty
+        case .smb:          return !host.isEmpty && !share.isEmpty && isPortValid && assembledURL != nil
+        case .nfs:          return !host.isEmpty && !exportPath.isEmpty && isPortValid && assembledURL != nil
+        case .ftp, .afp:    return !host.isEmpty && isPortValid && assembledURL != nil
+        case .other:
+            guard let url = URL(string: trimmedRawURL), url.scheme != nil else { return false }
+            return !rawURLContainsPassword
         }
     }
 
-    private var assembledURL: String {
+    private var isPortValid: Bool {
+        port.isEmpty || (Int(port).map { (1...65535).contains($0) } ?? false)
+    }
+
+    private var trimmedRawURL: String {
+        rawURL.trimmingCharacters(in: .whitespaces)
+    }
+
+    // Drive URLs are persisted in plain text in UserDefaults, so embedded
+    // passwords are rejected; credentials belong in the macOS Keychain.
+    private var rawURLContainsPassword: Bool {
+        URL(string: trimmedRawURL)?.password != nil
+    }
+
+    // URLComponents percent-encodes user, host and path, so share names with
+    // spaces or special characters produce a valid URL.
+    private var assembledURL: String? {
+        if driveType == .other { return trimmedRawURL }
+
+        var components = URLComponents()
+        components.host = host.trimmingCharacters(in: .whitespaces)
+        components.port = Int(port)
         switch driveType {
         case .smb:
-            let portPart  = port.isEmpty ? "" : ":\(port)"
+            components.scheme = "smb"
             let cleanShare = share.hasPrefix("/") ? String(share.dropFirst()) : share
-            return "smb://\(host)\(portPart)/\(cleanShare)"
+            components.path = "/\(cleanShare)"
         case .nfs:
-            let portPart = port.isEmpty ? "" : ":\(port)"
-            let path = exportPath.hasPrefix("/") ? exportPath : "/\(exportPath)"
-            return "nfs://\(host)\(portPart)\(path)"
+            components.scheme = "nfs"
+            components.path = exportPath.hasPrefix("/") ? exportPath : "/\(exportPath)"
         case .ftp:
-            let userPart = ftpUser.isEmpty ? "" : "\(ftpUser)@"
-            let portPart = port.isEmpty ? "" : ":\(port)"
-            let pathPart = ftpPath.isEmpty ? "" : (ftpPath.hasPrefix("/") ? ftpPath : "/\(ftpPath)")
-            return "ftp://\(userPart)\(host)\(portPart)\(pathPart)"
+            components.scheme = "ftp"
+            components.user = ftpUser.isEmpty ? nil : ftpUser
+            components.path = ftpPath.isEmpty ? "" : (ftpPath.hasPrefix("/") ? ftpPath : "/\(ftpPath)")
         case .afp:
-            let portPart  = port.isEmpty ? "" : ":\(port)"
-            let sharePart = share.isEmpty ? "" : "/\(share)"
-            return "afp://\(host)\(portPart)\(sharePart)"
+            components.scheme = "afp"
+            components.path = share.isEmpty ? "" : "/\(share)"
         case .other:
-            return rawURL.trimmingCharacters(in: .whitespaces)
+            break
         }
+        return components.url?.absoluteString
     }
 
     private func clearTypeSpecificFields() {
@@ -221,7 +247,7 @@ struct DriveFormView: View {
     }
 
     private func save() {
-        let finalURL    = assembledURL
+        guard let finalURL = assembledURL else { return }
         let trimmedLabel = label.trimmingCharacters(in: .whitespaces)
 
         if var existing = drive {
