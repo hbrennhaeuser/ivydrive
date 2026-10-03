@@ -74,10 +74,10 @@ private struct GeneralSettingsView: View {
             }
 
             Section("Menu") {
-                Toggle("Group by host", isOn: $groupDrivesByHost)
-                Toggle("Connect all servers when clicking a host header", isOn: $clickGroupToConnectAll)
-                    .disabled(!groupDrivesByHost)
-                    .padding(.leading, 16)
+                Toggle("Group by host", isOn: $groupDrivesByHost.animation())
+                if groupDrivesByHost {
+                    Toggle("Connect all servers when clicking a host header", isOn: $clickGroupToConnectAll)
+                }
                 Toggle("Show connected servers in the server list", isOn: $hideConnectedFromAvailable.inverted)
                 Toggle("Show details when hovering over an item", isOn: $showHoverInfo)
             }
@@ -249,10 +249,10 @@ private struct VolumesSettingsView: View {
                 Toggle("Open volumes in Finder when clicked", isOn: $clickVolumeToOpenInFinder)
             }
             Section("Capacity") {
-                Toggle("Show capacity bar", isOn: $showCapacityLine)
-                Toggle("Show used and total capacity", isOn: $showCapacityStats)
-                    .disabled(!showCapacityLine)
-                    .padding(.leading, 16)
+                Toggle("Show capacity bar", isOn: $showCapacityLine.animation())
+                if showCapacityLine {
+                    Toggle("Show used and total capacity", isOn: $showCapacityStats)
+                }
                 Toggle("Show capacity for read-only volumes", isOn: $hideCapacityForReadOnly.inverted)
                 Picker("Units", selection: $useBinaryUnits) {
                     Text("Decimal (KB, MB, GB, TB)").tag(false)
