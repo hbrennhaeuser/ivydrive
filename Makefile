@@ -7,6 +7,9 @@ MACOS_DIR := $(CONTENTS)/MacOS
 
 SOURCES := $(shell find Sources -name '*.swift')
 SWIFTC := xcrun swiftc
+ARCH ?= arm64
+MIN_MACOS := $(shell /usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' Resources/Info.plist)
+TARGET := -target $(ARCH)-apple-macos$(MIN_MACOS)
 SWIFT_FLAGS := -O -whole-module-optimization
 FRAMEWORKS := -framework Cocoa \
               -framework SwiftUI \
@@ -29,9 +32,10 @@ DMG_VOL_NAME := $(APP_NAME) $(VERSION)
 all: $(BINARY) $(PLIST)
 
 # Rules
-$(BINARY): $(SOURCES)
+# Info.plist is a prerequisite because the deployment target is read from it
+$(BINARY): $(SOURCES) Resources/Info.plist
 	@mkdir -p "$(@D)"
-	$(SWIFTC) $(SWIFT_FLAGS) $(SOURCES) $(FRAMEWORKS) -o "$@"
+	$(SWIFTC) $(TARGET) $(SWIFT_FLAGS) $(SOURCES) $(FRAMEWORKS) -o "$@"
 
 # Depends on $(BINARY) and $(ICON) so signing always runs after any content change
 $(PLIST): Resources/Info.plist $(BINARY) $(ICON)

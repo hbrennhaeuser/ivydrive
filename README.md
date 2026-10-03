@@ -12,7 +12,7 @@ macOS menu bar app for managing network drives and ejectable volumes.
 
 ## Requirements
 
-- macOS 13.0 (Ventura) or later
+- macOS 14.0 (Sonoma) or later on Apple Silicon
 - Xcode Command Line Tools (`xcode-select --install`)
 
 ## Build
