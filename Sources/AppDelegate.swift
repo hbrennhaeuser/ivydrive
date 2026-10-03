@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let normalRefreshInterval: TimeInterval  = 30   // clean result
     private let problemRefreshInterval: TimeInterval = 5    // failed / timedOut result
     private var refreshTimer: Timer?
+    private var cachedCapacities: [URL: VolumeCapacity] = [:]
 
     // MARK: - App Lifecycle
 
@@ -135,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         isMenuOpen = true
         rebuildMenu()
+        fetchCapacitiesAsync()
         let t = Timer(timeInterval: 5.0, repeats: true) { [weak self] _ in
             self?.refreshAvailabilityIfNeeded()
         }
@@ -154,7 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         liveAvailabilityViews = [:]
         buildNetworkDrivesSection(in: menu, availability: cachedAvailability, isChecking: isCheckingAvailability)
         menu.addItem(.separator())
-        buildEjectableVolumesSection(in: menu)
+        buildEjectableVolumesSection(in: menu, capacities: cachedCapacities)
         menu.addItem(.separator())
         buildAppSection(in: menu)
 
@@ -166,9 +168,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         startAvailabilityCheck(for: uncached)
     }
 
+    private func fetchCapacitiesAsync() {
+        guard UserDefaults.standard.bool(forKey: "showCapacityLine") else { return }
+        let volumes = VolumeMonitor.ejectableVolumes()
+        guard !volumes.isEmpty else { return }
+        let hideForReadOnly = UserDefaults.standard.bool(forKey: "hideCapacityForReadOnly")
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            var results = [URL: VolumeCapacity]()
+            let lock = NSLock()
+            let group = DispatchGroup()
+
+            for volume in volumes {
+                group.enter()
+                DispatchQueue.global(qos: .utility).async {
+                    defer { group.leave() }
+                    let keys: Set<URLResourceKey> = [
+                        .volumeTotalCapacityKey,
+                        .volumeAvailableCapacityKey,
+                        .volumeIsReadOnlyKey,
+                    ]
+                    guard let vals = try? volume.volumeURL.resourceValues(forKeys: keys),
+                          let total = vals.volumeTotalCapacity,
+                          let free  = vals.volumeAvailableCapacity,
+                          total > 0 else { return }
+                    let isRO = vals.volumeIsReadOnly ?? false
+                    if hideForReadOnly && isRO { return }
+                    lock.lock()
+                    results[volume.volumeURL] = VolumeCapacity(usedBytes: total - free, totalBytes: total, isReadOnly: isRO)
+                    lock.unlock()
+                }
+            }
+
+            _ = group.wait(timeout: .now() + 5.0)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.cachedCapacities = results
+                if self.isMenuOpen { self.rebuildMenu() }
+            }
+        }
+    }
+
     private func startAvailabilityCheck(for drives: [NetworkDrive]) {
         guard !drives.isEmpty, !isCheckingAvailability else { return }
         isCheckingAvailability = true
+        for drive in drives where cachedAvailability[drive.id] != nil {
+            liveAvailabilityViews[drive.id]?.setRefreshing(true)
+        }
         DriveAvailabilityChecker.shared.checkAllAsync(drives) { [weak self] results in
             guard let self else { return }
             self.cachedAvailability.merge(results) { _, new in new }
@@ -343,7 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item)
     }
 
-    private func buildEjectableVolumesSection(in menu: NSMenu) {
+    private func buildEjectableVolumesSection(in menu: NSMenu, capacities: [URL: VolumeCapacity]) {
         let ud = UserDefaults.standard
         let allVolumes = VolumeMonitor.ejectableVolumes()
         let volumes = ud.bool(forKey: "hideLocalDrives")
@@ -357,8 +403,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item)
             return
         }
-
-        let capacities = prefetchCapacities(for: volumes)
 
         if !groupByHost {
             for volume in volumes {
@@ -435,43 +479,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         item.view = view
         item.toolTip = "Click to eject \(volume.name)"
         menu.addItem(item)
-    }
-
-    /// Fetches capacity for all volumes in parallel. Waits at most 200 ms for the
-    /// whole batch — fast enough to be imperceptible, long enough for most reachable
-    /// network drives. Volumes that don't respond in time simply get no capacity bar.
-    private func prefetchCapacities(for volumes: [MountedVolume]) -> [URL: VolumeCapacity] {
-        let ud = UserDefaults.standard
-        guard ud.bool(forKey: "showCapacityLine") else { return [:] }
-        let hideForReadOnly = ud.bool(forKey: "hideCapacityForReadOnly")
-
-        var results = [URL: VolumeCapacity]()
-        let lock = NSLock()
-        let group = DispatchGroup()
-
-        for volume in volumes {
-            group.enter()
-            DispatchQueue.global(qos: .userInitiated).async {
-                defer { group.leave() }
-                let keys: Set<URLResourceKey> = [
-                    .volumeTotalCapacityKey,
-                    .volumeAvailableCapacityKey,
-                    .volumeIsReadOnlyKey,
-                ]
-                guard let vals = try? volume.volumeURL.resourceValues(forKeys: keys),
-                      let total = vals.volumeTotalCapacity,
-                      let free  = vals.volumeAvailableCapacity,
-                      total > 0 else { return }
-                let isRO = vals.volumeIsReadOnly ?? false
-                if hideForReadOnly && isRO { return }
-                lock.lock()
-                results[volume.volumeURL] = VolumeCapacity(usedBytes: total - free, totalBytes: total, isReadOnly: isRO)
-                lock.unlock()
-            }
-        }
-
-        _ = group.wait(timeout: .now() + 0.2)
-        return results
     }
 
     private func buildAppSection(in menu: NSMenu) {

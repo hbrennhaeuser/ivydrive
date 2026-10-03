@@ -1,8 +1,45 @@
 import Cocoa
 
 private final class StatusBubbleView: NSView {
+    private var ringLayer: CAShapeLayer?
+
     func setFillColor(_ color: NSColor) {
         layer?.backgroundColor = color.cgColor
+    }
+
+    func startRefreshAnimation() {
+        guard ringLayer == nil else { return }
+        let size: CGFloat = 18
+        let lineWidth: CGFloat = 2.0
+        let radius = (size - lineWidth) / 2
+
+        let path = CGMutablePath()
+        path.addArc(center: CGPoint(x: size / 2, y: size / 2),
+                    radius: radius, startAngle: 0, endAngle: .pi * 1.5, clockwise: false)
+
+        let shape = CAShapeLayer()
+        shape.path = path
+        shape.fillColor = nil
+        shape.strokeColor = NSColor.white.withAlphaComponent(0.75).cgColor
+        shape.lineWidth = lineWidth
+        shape.lineCap = .round
+        shape.frame = CGRect(x: 0, y: 0, width: size, height: size)
+
+        let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+        spin.fromValue = 0
+        spin.toValue = CGFloat.pi * 2
+        spin.duration = 1.0
+        spin.repeatCount = .infinity
+        spin.isRemovedOnCompletion = false
+        shape.add(spin, forKey: "spin")
+
+        layer?.addSublayer(shape)
+        ringLayer = shape
+    }
+
+    func stopRefreshAnimation() {
+        ringLayer?.removeFromSuperlayer()
+        ringLayer = nil
     }
 
     init(fillColor: NSColor) {
@@ -294,8 +331,14 @@ final class NetworkDriveMenuItemView: NSView {
         spinner.startAnimation(nil)
     }
 
+    func setRefreshing(_ refreshing: Bool) {
+        guard !isConnected, !isInProgress, availability != nil else { return }
+        refreshing ? bubbleView.startRefreshAnimation() : bubbleView.stopRefreshAnimation()
+    }
+
     func updateAvailability(_ result: DriveAvailabilityResult) {
         guard !isConnected, !isInProgress else { return }
+        bubbleView.stopRefreshAnimation()
         availability = result
         let allDisabled = [result.dns, result.reachable, result.port]
             .allSatisfy { $0 == .disabled || $0 == .skipped }
