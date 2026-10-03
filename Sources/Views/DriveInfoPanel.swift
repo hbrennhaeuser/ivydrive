@@ -5,12 +5,13 @@ private struct DriveInfoView: View {
     let rows: [(label: String, value: String)]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 4, verticalSpacing: 3) {
             ForEach(rows.indices, id: \.self) { i in
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                GridRow {
                     Text(rows[i].label + ":")
-                        .frame(width: 66, alignment: .trailing)
                         .foregroundStyle(.secondary)
+                        .fixedSize()
+                        .gridColumnAlignment(.trailing)
                     Text(rows[i].value)
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
