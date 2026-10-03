@@ -1,10 +1,22 @@
-# Ivy Drive
+<p align="center">
+  <img src="Resources/AppIcon.png" alt="" width="128">
+</p>
 
-Keep track of your network shares on macOS and reconnect them with one click.
+<h1 align="center">Ivy Drive</h1>
+
+<p align="center">Keep track of your network shares on macOS and reconnect them with one click.</p>
 
 Ivy Drive remembers your network shares (SMB, NFS, FTP, AFP, or any server address macOS can connect to), shows at a glance which ones are connected and which servers are reachable, and brings them back automatically when you start your Mac or switch networks.
 
 ![Ivy Drive menu with share info panel](docs/img/menu-overview.jpg)
+
+## Quick start
+
+1. Download the latest `.dmg` from [Releases](https://github.com/hbrennhaeuser/ivydrive/releases/latest).
+2. Open it and drag **IvyDrive** to **Applications**.
+3. Start Ivy Drive from Applications. Its icon appears in the menu bar.
+
+Builds are not notarized, so macOS blocks the first launch. See [First launch](docs/user/installation.md#first-launch) for how to allow it.
 
 ## Features
 
