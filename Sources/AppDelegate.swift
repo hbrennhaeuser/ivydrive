@@ -519,7 +519,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.activeOperations.removeValue(forKey: drive.id)
-                if self.isMenuOpen { self.rebuildMenu() }
+                if self.isMenuOpen {
+                    self.rebuildMenu()
+                    // menuWillOpen fetched capacities before this volume existed.
+                    self.fetchCapacitiesAsync()
+                }
             }
         }
     }
