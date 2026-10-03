@@ -16,8 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         notificationManager: notificationManager
     )
 
-    private var preferencesWindow: NSWindow?
-    private let preferencesViewModel = PreferencesViewModel()
+    private var settingsWindow: NSWindow?
+    private var settingsController: SettingsTabViewController?
 
     /// Keyed by drive UUID (connecting) or volume URL string (ejecting).
     private var activeOperations: [AnyHashable: DriveOperation] = [:]
@@ -78,7 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let alert = NSAlert()
         alert.messageText = "Open MenuBarFS When You Log In?"
-        alert.informativeText = "Would you like MenuBarFS to open automatically when you log in? You can change this later in Settings > Maintenance."
+        alert.informativeText = "Would you like MenuBarFS to open automatically when you log in? You can change this later in Settings > General."
         alert.addButton(withTitle: "Enable")
         alert.addButton(withTitle: "Not Now")
         alert.alertStyle = .informational
@@ -547,30 +547,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showPreferences() {
-        openPreferences(tab: 0)
-    }
-
-    @objc private func showAbout() {
-        openPreferences(tab: 4)
-    }
-
-    private func openPreferences(tab: Int) {
-        preferencesViewModel.selectedTab = tab
-        if preferencesWindow == nil {
-            let view = PreferencesView(manager: driveManager, viewModel: preferencesViewModel)
-            let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 500, height: 490),
-                styleMask: [.titled, .closable, .miniaturizable],
-                backing: .buffered,
-                defer: false
-            )
-            window.title = "MenuBarFS Settings"
-            window.contentView = NSHostingView(rootView: view)
+        if settingsWindow == nil {
+            let controller = SettingsTabViewController(manager: driveManager)
+            let window = NSWindow(contentViewController: controller)
+            window.styleMask = [.titled, .closable, .miniaturizable]
             window.isReleasedWhenClosed = false
-            preferencesWindow = window
+            settingsController = controller
+            settingsWindow = window
         }
-        preferencesWindow?.center()
-        preferencesWindow?.makeKeyAndOrderFront(nil)
+        settingsController?.select(.general)
+        settingsWindow?.center()
+        settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 

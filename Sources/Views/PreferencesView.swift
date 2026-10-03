@@ -1,54 +1,128 @@
 import SwiftUI
 import ServiceManagement
 
-final class PreferencesViewModel: ObservableObject {
-    @Published var selectedTab: Int = 0
+enum SettingsTab: Int {
+    case general, servers, volumes, about
 }
 
-struct PreferencesView: View {
-    @ObservedObject var manager: NetworkDriveManager
-    @ObservedObject var viewModel: PreferencesViewModel
+/// Toolbar-style settings window: each pane is a SwiftUI view hosted in its own tab item,
+/// and the window title follows the selected pane.
+final class SettingsTabViewController: NSTabViewController {
+    private static let paneWidth: CGFloat = 520
 
-    var body: some View {
-        TabView(selection: $viewModel.selectedTab) {
-            NetworkDrivesTab(manager: manager)
-                .tabItem {
-                    Label("Servers", systemImage: "externaldrive.connected.to.line.below")
-                }
-                .tag(0)
-            AppearanceTab()
-                .tabItem {
-                    Label("Appearance", systemImage: "paintbrush")
-                }
-                .tag(1)
-            GeneralTab()
-                .tabItem {
-                    Label("General", systemImage: "gearshape")
-                }
-                .tag(2)
-            MaintenanceTab()
-                .tabItem {
-                    Label("Maintenance", systemImage: "wrench.and.screwdriver")
-                }
-                .tag(3)
-            AboutView()
-                .tabItem {
-                    Label("About", systemImage: "info.circle")
-                }
-                .tag(4)
-        }
-        .frame(width: 620, height: 490)
+    init(manager: NetworkDriveManager) {
+        super.init(nibName: nil, bundle: nil)
+        tabStyle = .toolbar
+        addPane(GeneralSettingsView(), label: "General", symbol: "gearshape", height: 400)
+        addPane(ServersSettingsView(manager: manager), label: "Servers", symbol: "externaldrive.connected.to.line.below", height: 420)
+        addPane(VolumesSettingsView(), label: "Volumes", symbol: "internaldrive", height: 340)
+        addPane(AboutView(), label: "About", symbol: "info.circle", height: 320)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func select(_ tab: SettingsTab) {
+        selectedTabViewItemIndex = tab.rawValue
+    }
+
+    private func addPane<Content: View>(_ content: Content, label: String, symbol: String, height: CGFloat) {
+        let controller = NSHostingController(rootView: content.frame(width: Self.paneWidth, height: height))
+        controller.sizingOptions = .preferredContentSize
+        // NSTabViewController propagates the selected child's title to the window.
+        controller.title = label
+        let item = NSTabViewItem(viewController: controller)
+        item.label = label
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        addTabViewItem(item)
     }
 }
 
-// MARK: - Network Drives Tab
+private extension Binding where Value == Bool {
+    /// Presents a stored "hide" flag as a positive "show" toggle without changing the stored key.
+    var inverted: Binding<Bool> {
+        Binding(get: { !wrappedValue }, set: { wrappedValue = !$0 })
+    }
+}
 
-private struct NetworkDrivesTab: View {
+// MARK: - General
+
+private struct GeneralSettingsView: View {
+    @AppStorage("groupDrivesByHost")          private var groupDrivesByHost          = true
+    @AppStorage("clickGroupToConnectAll")     private var clickGroupToConnectAll     = true
+    @AppStorage("hideConnectedFromAvailable") private var hideConnectedFromAvailable = true
+    @AppStorage("showHoverInfo")              private var showHoverInfo              = false
+
+    @State private var loginItemEnabled = false
+    @State private var showingResetConfirmation = false
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Open at login", isOn: $loginItemEnabled)
+                    .onChange(of: loginItemEnabled) { _, enabled in
+                        if enabled {
+                            try? SMAppService.mainApp.register()
+                        } else {
+                            try? SMAppService.mainApp.unregister()
+                        }
+                    }
+            } header: {
+                Text("Startup")
+            } footer: {
+                Text("You can also manage this in System Settings > General > Login Items.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Menu") {
+                Toggle("Group by host", isOn: $groupDrivesByHost)
+                Toggle("Connect all servers when clicking a host header", isOn: $clickGroupToConnectAll)
+                    .disabled(!groupDrivesByHost)
+                    .padding(.leading, 16)
+                Toggle("Show connected servers in the server list", isOn: $hideConnectedFromAvailable.inverted)
+                Toggle("Show details when hovering over an item", isOn: $showHoverInfo)
+            }
+
+            Section {
+                Button("Reset…", role: .destructive) { showingResetConfirmation = true }
+            } header: {
+                Text("Reset")
+            } footer: {
+                Text("Deletes all settings and saved servers, removes the login item and quits MenuBarFS.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear {
+            loginItemEnabled = SMAppService.mainApp.status == .enabled
+        }
+        .confirmationDialog(
+            "Reset MenuBarFS?",
+            isPresented: $showingResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reset and Quit", role: .destructive, action: resetAndQuit)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("All settings and saved servers will be permanently deleted. This cannot be undone.")
+        }
+    }
+
+    private func resetAndQuit() {
+        try? SMAppService.mainApp.unregister()
+        if let bundleID = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: bundleID)
+        }
+        NSApp.terminate(nil)
+    }
+}
+
+// MARK: - Servers
+
+private struct ServersSettingsView: View {
     @ObservedObject var manager: NetworkDriveManager
     @State private var showAddSheet = false
     @State private var editingDrive: NetworkDrive?
     @State private var selection: UUID?
-    @State private var eventMonitor: Any?
 
     private var groupedDrives: [(host: String, drives: [NetworkDrive])] {
         var groups: [String: [NetworkDrive]] = [:]
@@ -77,6 +151,23 @@ private struct NetworkDrivesTab: View {
                     }
                 }
             }
+            .contextMenu(forSelectionType: UUID.self) { ids in
+                if let drive = drive(for: ids) {
+                    Button("Edit") { editingDrive = drive }
+                    Button("Remove") { remove(drive) }
+                }
+            } primaryAction: { ids in
+                editingDrive = drive(for: ids)
+            }
+            .overlay {
+                if manager.drives.isEmpty {
+                    ContentUnavailableView(
+                        "No Servers",
+                        systemImage: "externaldrive.connected.to.line.below",
+                        description: Text("Click + to add a server.")
+                    )
+                }
+            }
 
             Divider()
 
@@ -84,36 +175,17 @@ private struct NetworkDrivesTab: View {
                 Button(action: { showAddSheet = true }) {
                     Image(systemName: "plus")
                 }
-                Button(action: removeSelected) {
+                Button(action: { if let drive = selectedDrive { remove(drive) } }) {
                     Image(systemName: "minus")
                 }
                 .disabled(selection == nil)
 
                 Spacer()
 
-                Button("Edit") {
-                    if let id = selection,
-                       let drive = manager.drives.first(where: { $0.id == id }) {
-                        editingDrive = drive
-                    }
-                }
+                Button("Edit") { editingDrive = selectedDrive }
                 .disabled(selection == nil)
             }
             .padding(8)
-        }
-        .onAppear {
-            eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
-                guard event.clickCount == 2,
-                      let id = selection,
-                      let drive = manager.drives.first(where: { $0.id == id })
-                else { return event }
-                DispatchQueue.main.async { editingDrive = drive }
-                return event
-            }
-        }
-        .onDisappear {
-            if let m = eventMonitor { NSEvent.removeMonitor(m) }
-            eventMonitor = nil
         }
         .sheet(isPresented: $showAddSheet) {
             DriveFormView(manager: manager, drive: nil)
@@ -143,38 +215,46 @@ private struct NetworkDrivesTab: View {
             Spacer()
         }
         .tag(drive.id)
-        .contextMenu {
-            Button("Edit") { editingDrive = drive }
-            Button("Remove") { manager.remove(drive) }
-        }
     }
 
-    private func removeSelected() {
-        guard let id = selection,
-              let drive = manager.drives.first(where: { $0.id == id }) else { return }
+    private var selectedDrive: NetworkDrive? {
+        selection.flatMap { id in manager.drives.first { $0.id == id } }
+    }
+
+    private func drive(for ids: Set<UUID>) -> NetworkDrive? {
+        guard ids.count == 1, let id = ids.first else { return nil }
+        return manager.drives.first { $0.id == id }
+    }
+
+    private func remove(_ drive: NetworkDrive) {
         manager.remove(drive)
-        selection = nil
+        if selection == drive.id { selection = nil }
     }
 }
 
-// MARK: - Appearance Tab
+// MARK: - Volumes
 
-private struct AppearanceTab: View {
-    @AppStorage("showCapacityLine")        private var showCapacityLine        = true
-    @AppStorage("showCapacityStats")       private var showCapacityStats       = true
-    @AppStorage("useBinaryUnits")          private var useBinaryUnits          = false
-    @AppStorage("hideCapacityForReadOnly") private var hideCapacityForReadOnly = true
+private struct VolumesSettingsView: View {
+    @AppStorage("hideLocalDrives")           private var hideLocalDrives           = false
+    @AppStorage("clickVolumeToOpenInFinder") private var clickVolumeToOpenInFinder = true
+    @AppStorage("showCapacityLine")          private var showCapacityLine          = true
+    @AppStorage("showCapacityStats")         private var showCapacityStats         = true
+    @AppStorage("hideCapacityForReadOnly")   private var hideCapacityForReadOnly   = true
+    @AppStorage("useBinaryUnits")            private var useBinaryUnits            = false
 
     var body: some View {
         Form {
-            Section("Capacity Bar") {
-                Toggle("Show capacity bar", isOn: $showCapacityLine)
-                Toggle("Show capacity stats", isOn: $showCapacityStats)
-                    .disabled(!showCapacityLine)
-                Toggle("Hide for read-only volumes", isOn: $hideCapacityForReadOnly)
+            Section("List") {
+                Toggle("Show local volumes", isOn: $hideLocalDrives.inverted)
+                Toggle("Open volumes in Finder when clicked", isOn: $clickVolumeToOpenInFinder)
             }
-            Section("Units") {
-                Picker("Capacity units", selection: $useBinaryUnits) {
+            Section("Capacity") {
+                Toggle("Show capacity bar", isOn: $showCapacityLine)
+                Toggle("Show used and total capacity", isOn: $showCapacityStats)
+                    .disabled(!showCapacityLine)
+                    .padding(.leading, 16)
+                Toggle("Show capacity for read-only volumes", isOn: $hideCapacityForReadOnly.inverted)
+                Picker("Units", selection: $useBinaryUnits) {
                     Text("Decimal (KB, MB, GB, TB)").tag(false)
                     Text("Binary (KiB, MiB, GiB, TiB)").tag(true)
                 }
@@ -182,94 +262,5 @@ private struct AppearanceTab: View {
             }
         }
         .formStyle(.grouped)
-        .padding(.top, 8)
-    }
-}
-
-// MARK: - General Tab
-
-private struct GeneralTab: View {
-    @AppStorage("groupDrivesByHost")            private var groupDrivesByHost            = true
-    @AppStorage("hideConnectedFromAvailable")  private var hideConnectedFromAvailable  = true
-    @AppStorage("showHoverInfo")               private var showHoverInfo               = false
-    @AppStorage("hideLocalDrives")             private var hideLocalDrives             = false
-    @AppStorage("clickGroupToConnectAll")      private var clickGroupToConnectAll      = true
-    @AppStorage("clickVolumeToOpenInFinder")   private var clickVolumeToOpenInFinder   = true
-
-    var body: some View {
-        Form {
-            Section("Server List") {
-                Toggle("Group by server", isOn: $groupDrivesByHost)
-                Toggle("Click group header to connect all", isOn: $clickGroupToConnectAll)
-                    .disabled(!groupDrivesByHost)
-                Toggle("Hide connected servers from available list", isOn: $hideConnectedFromAvailable)
-                Toggle("Hide local drives from connected list", isOn: $hideLocalDrives)
-            }
-            Section("Connected Drives") {
-                Toggle("Click to open in Finder", isOn: $clickVolumeToOpenInFinder)
-            }
-            Section("Hover") {
-                Toggle("Show drive info on hover", isOn: $showHoverInfo)
-            }
-        }
-        .formStyle(.grouped)
-        .padding(.top, 8)
-    }
-}
-
-// MARK: - Maintenance Tab
-
-private struct MaintenanceTab: View {
-    @State private var loginItemEnabled: Bool = false
-    @State private var showingResetConfirmation = false
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle("Open at login", isOn: $loginItemEnabled)
-                    .onChange(of: loginItemEnabled) { _, enabled in
-                        if enabled {
-                            try? SMAppService.mainApp.register()
-                        } else {
-                            try? SMAppService.mainApp.unregister()
-                        }
-                    }
-            } header: {
-                Text("Startup")
-            } footer: {
-                Text("Automatically open MenuBarFS when you log in. You can also manage this in System Settings > General > Login Items.")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                Button(role: .destructive, action: { showingResetConfirmation = true }) {
-                    Label("Reset All Settings", systemImage: "trash")
-                }
-            } header: {
-                Text("Data Management")
-            } footer: {
-                Text("Removes all settings and saved servers. The app will quit immediately.")
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-        .padding(.top, 8)
-        .onAppear {
-            loginItemEnabled = SMAppService.mainApp.status == .enabled
-        }
-        .confirmationDialog(
-            "Reset All Settings",
-            isPresented: $showingResetConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Reset and Quit", role: .destructive) {
-                if let bundleID = Bundle.main.bundleIdentifier {
-                    UserDefaults.standard.removePersistentDomain(forName: bundleID)
-                }
-                NSApp.terminate(nil)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("All settings and saved servers will be permanently deleted. This cannot be undone.")
-        }
     }
 }
