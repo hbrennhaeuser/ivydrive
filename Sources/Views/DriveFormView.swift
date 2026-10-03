@@ -22,10 +22,8 @@ struct DriveFormView: View {
     @State private var checkHostReachability = false
     @State private var checkDNSResolution = false
     @State private var checkPortAvailability = false
-    @State private var autoConnect = false
     @State private var autoConnectOnStartup = false
     @State private var autoConnectOnNetworkChange = false
-    @State private var advancedExpanded = false
 
     private var isEditing: Bool { drive != nil }
 
@@ -37,7 +35,7 @@ struct DriveFormView: View {
                 .padding(.bottom, 4)
 
             Form {
-                Section("Protocol") {
+                Section {
                     Picker("Protocol", selection: $driveType) {
                         ForEach(DriveType.allCases, id: \.self) { type in
                             Text(type.displayName).tag(type)
@@ -47,61 +45,28 @@ struct DriveFormView: View {
                     .onChange(of: driveType) { _, _ in
                         if !isEditing { clearTypeSpecificFields() }
                     }
-                }
-
-                Section("Connection") {
                     typeSpecificFields
+                    TextField("Display name", text: $label, prompt: Text("Optional"))
+                } header: {
+                    Text("Server")
+                } footer: {
+                    Text("The display name defaults to host/share.")
+                        .foregroundStyle(.secondary)
                 }
 
-                Section("Display") {
-                    TextField("Display Name", text: $label,
-                              prompt: Text("Optional — defaults to server/share"))
+                Section("Connect Automatically") {
+                    Toggle("When MenuBarFS starts", isOn: $autoConnectOnStartup)
+                    Toggle("When the network changes", isOn: $autoConnectOnNetworkChange)
                 }
 
-                Section(
-                    content: {
-                        if advancedExpanded {
-                            Text("Autoconnect")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                            Toggle("Automatically connect this server", isOn: $autoConnect)
-                                .onChange(of: autoConnect) { _, enabled in
-                                    if !enabled {
-                                        autoConnectOnStartup = false
-                                        autoConnectOnNetworkChange = false
-                                    }
-                                }
-                            Toggle("On app startup", isOn: $autoConnectOnStartup)
-                                .disabled(!autoConnect)
-                                .padding(.leading, 16)
-                            Toggle("On network change", isOn: $autoConnectOnNetworkChange)
-                                .disabled(!autoConnect)
-                                .padding(.leading, 16)
-                            Text("Availability Checks")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 4)
-                            Toggle("Check network availability", isOn: $checkHostReachability)
-                            Toggle("Check DNS resolution", isOn: $checkDNSResolution)
-                            Toggle("Check port availability", isOn: $checkPortAvailability)
-                        }
-                    },
-                    header: {
-                        Button {
-                            withAnimation { advancedExpanded.toggle() }
-                        } label: {
-                            HStack {
-                                Text("Advanced")
-                                Spacer()
-                                Image(systemName: advancedExpanded ? "chevron.down" : "chevron.right")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                )
+                Section("Availability Checks") {
+                    Toggle("Network is available", isOn: $checkHostReachability)
+                    Toggle("Hostname resolves (DNS)", isOn: $checkDNSResolution)
+                    Toggle("Port is open", isOn: $checkPortAvailability)
+                }
             }
+            .formStyle(.grouped)
+            .frame(minHeight: 480)
 
             HStack {
                 Button("Cancel") { dismiss() }
@@ -114,7 +79,7 @@ struct DriveFormView: View {
             .padding(.top, 12)
         }
         .padding(20)
-        .frame(width: 440)
+        .frame(width: 460)
         .onAppear(perform: populateFields)
     }
 
@@ -122,20 +87,20 @@ struct DriveFormView: View {
     private var typeSpecificFields: some View {
         switch driveType {
         case .smb:
-            TextField("Server", text: $host, prompt: Text("server.local"))
+            TextField("Host", text: $host, prompt: Text("server.local"))
             TextField("Share", text: $share, prompt: Text("ShareName"))
             TextField("Port", text: $port, prompt: Text("445 (optional)"))
         case .nfs:
-            TextField("Server", text: $host, prompt: Text("server.local"))
-            TextField("Export Path", text: $exportPath, prompt: Text("/exports/data"))
+            TextField("Host", text: $host, prompt: Text("server.local"))
+            TextField("Export path", text: $exportPath, prompt: Text("/exports/data"))
             TextField("Port", text: $port, prompt: Text("2049 (optional)"))
         case .ftp:
-            TextField("Server", text: $host, prompt: Text("ftp.server.com"))
+            TextField("Host", text: $host, prompt: Text("ftp.server.com"))
             TextField("Username", text: $ftpUser, prompt: Text("anonymous (optional)"))
             TextField("Path", text: $ftpPath, prompt: Text("/pub (optional)"))
             TextField("Port", text: $port, prompt: Text("21 (optional)"))
         case .afp:
-            TextField("Server", text: $host, prompt: Text("server.local"))
+            TextField("Host", text: $host, prompt: Text("server.local"))
             TextField("Share", text: $share, prompt: Text("ShareName (optional)"))
             TextField("Port", text: $port, prompt: Text("548 (optional)"))
         case .other:
@@ -146,6 +111,24 @@ struct DriveFormView: View {
                     .foregroundStyle(.red)
             }
         }
+        if driveType != .other {
+            if !host.isEmpty && assembledURL == nil {
+                validationMessage("Enter a valid host name.")
+            }
+            if !isPortValid {
+                validationMessage("Port must be between 1 and 65535.")
+            }
+        }
+    }
+
+    private func validationMessage(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.red)
+    }
+
+    private var autoConnect: Bool {
+        autoConnectOnStartup || autoConnectOnNetworkChange
     }
 
     private var isValid: Bool {
@@ -214,13 +197,8 @@ struct DriveFormView: View {
         checkHostReachability = drive.checkHostReachability
         checkDNSResolution = drive.checkDNSResolution
         checkPortAvailability = drive.checkPortAvailability
-        autoConnect = drive.autoConnect
-        autoConnectOnStartup = drive.autoConnectOnStartup
-        autoConnectOnNetworkChange = drive.autoConnectOnNetworkChange
-        if drive.checkHostReachability || drive.checkDNSResolution || drive.checkPortAvailability
-            || drive.autoConnect {
-            advancedExpanded = true
-        }
+        autoConnectOnStartup = drive.autoConnect && drive.autoConnectOnStartup
+        autoConnectOnNetworkChange = drive.autoConnect && drive.autoConnectOnNetworkChange
 
         guard driveType != .other,
               let parsed = URL(string: drive.url),
