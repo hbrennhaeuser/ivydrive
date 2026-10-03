@@ -24,6 +24,7 @@ FRAMEWORKS := -framework Cocoa \
 BINARY  := $(MACOS_DIR)/$(APP_NAME)
 PLIST   := $(CONTENTS)/Info.plist
 ICON    := $(CONTENTS)/Resources/AppIcon.icns
+STATUS_ICON := $(CONTENTS)/Resources/MenuBarIcon.pdf
 VERSION      := $(shell /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Resources/Info.plist 2>/dev/null || echo '0.0.0')
 DMG          := $(BUILD_DIR)/$(APP_NAME)-$(VERSION).dmg
 DMG_VOL_NAME := $(APP_NAME) $(VERSION)
@@ -40,13 +41,17 @@ $(BINARY): $(SOURCES) Resources/Info.plist
 	@mkdir -p "$(@D)"
 	$(SWIFTC) $(TARGET) $(SWIFT_FLAGS) $(SOURCES) $(FRAMEWORKS) -o "$@"
 
-# Depends on $(BINARY) and $(ICON) so signing always runs after any content change
-$(PLIST): Resources/Info.plist $(BINARY) $(ICON)
+# Depends on all bundle content so signing always runs after any content change
+$(PLIST): Resources/Info.plist $(BINARY) $(ICON) $(STATUS_ICON)
 	@mkdir -p "$(@D)"
 	@cp Resources/Info.plist "$@"
 	@codesign --sign - --force --deep "$(APP_BUNDLE)"
 
 $(ICON): Resources/AppIcon.icns
+	@mkdir -p "$(@D)"
+	@cp "$<" "$@"
+
+$(STATUS_ICON): Resources/MenuBarIcon.pdf
 	@mkdir -p "$(@D)"
 	@cp "$<" "$@"
 

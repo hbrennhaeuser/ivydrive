@@ -6,9 +6,9 @@ struct AboutView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "externaldrive.connected.to.line.below")
-                .font(.system(size: 48))
-                .foregroundStyle(.primary)
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 64, height: 64)
 
             Text("MenuBarFS")
                 .font(.title2)

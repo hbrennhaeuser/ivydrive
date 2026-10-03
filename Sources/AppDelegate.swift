@@ -120,11 +120,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
-            button.image = NSImage(
-                systemSymbolName: "externaldrive.connected.to.line.below",
-                accessibilityDescription: "MenuBarFS"
-            )
-            button.image?.isTemplate = true
+            let image = NSImage(named: "MenuBarIcon")
+            image?.isTemplate = true
+            image?.size = NSSize(width: 18, height: 18)
+            image?.accessibilityDescription = "MenuBarFS"
+            button.image = image
         }
 
         menu.delegate = self
