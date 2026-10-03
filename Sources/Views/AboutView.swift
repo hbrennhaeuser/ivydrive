@@ -22,7 +22,7 @@ struct AboutView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text("Manage network drives and removable volumes from your menu bar.")
+            Text("Keep track of your servers and reconnect them with one click.")
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)

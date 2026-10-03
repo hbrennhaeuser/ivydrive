@@ -148,7 +148,7 @@ extension DriveInfoPanel {
                 sema.signal()
             }
             if sema.wait(timeout: .now() + 1.5) == .timedOut {
-                return [("Mount", url.path), ("Status", "Volume unreachable")]
+                return [("Location", url.path), ("Status", "Volume unreachable")]
             }
             values = fetched
         }

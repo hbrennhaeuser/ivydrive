@@ -81,7 +81,7 @@ struct DriveFormView: View {
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
                                 .padding(.top, 4)
-                            Toggle("Check host reachability", isOn: $checkHostReachability)
+                            Toggle("Check network availability", isOn: $checkHostReachability)
                             Toggle("Check DNS resolution", isOn: $checkDNSResolution)
                             Toggle("Check port availability", isOn: $checkPortAvailability)
                         }
