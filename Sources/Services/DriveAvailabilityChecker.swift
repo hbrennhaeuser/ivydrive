@@ -24,7 +24,7 @@ final class DriveAvailabilityChecker {
     // when many drives are configured.
     private let hostQueue: OperationQueue = {
         let q = OperationQueue()
-        q.name = "com.menubarfs.availability"
+        q.name = "com.hbrennhaeuser.ivydrive.availability"
         q.maxConcurrentOperationCount = 6
         q.qualityOfService = .userInitiated
         return q

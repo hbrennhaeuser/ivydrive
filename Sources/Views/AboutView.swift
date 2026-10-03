@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AboutView: View {
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
-    private let repositoryURL = URL(string: "https://github.com/hbrennhaeuser/menubarfs")!
+    private let repositoryURL = URL(string: "https://github.com/hbrennhaeuser/ivydrive")!
 
     var body: some View {
         VStack(spacing: 12) {
@@ -10,7 +10,7 @@ struct AboutView: View {
                 .resizable()
                 .frame(width: 64, height: 64)
 
-            Text("MenuBarFS")
+            Text("Ivy Drive")
                 .font(.title2)
                 .fontWeight(.bold)
 
@@ -32,7 +32,7 @@ struct AboutView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Link("github.com/hbrennhaeuser/menubarfs", destination: repositoryURL)
+            Link("github.com/hbrennhaeuser/ivydrive", destination: repositoryURL)
                 .font(.caption)
         }
         .padding(24)

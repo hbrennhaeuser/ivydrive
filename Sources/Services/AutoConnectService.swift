@@ -6,7 +6,7 @@ final class AutoConnectService {
     private weak var notificationManager: NotificationManager?
 
     private let monitor = NWPathMonitor()
-    private let monitorQueue = DispatchQueue(label: "com.menubarfs.autoconnect.monitor")
+    private let monitorQueue = DispatchQueue(label: "com.hbrennhaeuser.ivydrive.autoconnect.monitor")
     private var previousPath: NWPath?
 
     // Cancelled and replaced on each new trigger; ensures at most one pending attempt.

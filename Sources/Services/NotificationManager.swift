@@ -81,7 +81,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     private func showPermissionDeniedAlert() {
         let alert = NSAlert()
         alert.messageText = "Notifications Disabled"
-        alert.informativeText = "Enable notifications for MenuBarFS in System Settings > Notifications to receive connect and eject updates."
+        alert.informativeText = "Enable notifications for Ivy Drive in System Settings > Notifications to receive connect and eject updates."
         alert.alertStyle = .informational
         alert.runModal()
     }

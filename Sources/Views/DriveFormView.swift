@@ -55,7 +55,7 @@ struct DriveFormView: View {
                 }
 
                 Section("Connect Automatically") {
-                    Toggle("When MenuBarFS starts", isOn: $autoConnectOnStartup)
+                    Toggle("When Ivy Drive starts", isOn: $autoConnectOnStartup)
                     Toggle("When the network changes", isOn: $autoConnectOnNetworkChange)
                 }
 

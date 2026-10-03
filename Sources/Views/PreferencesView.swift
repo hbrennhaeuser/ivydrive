@@ -87,7 +87,7 @@ private struct GeneralSettingsView: View {
             } header: {
                 Text("Reset")
             } footer: {
-                Text("Deletes all settings and saved servers, removes the login item and quits MenuBarFS.")
+                Text("Deletes all settings and saved servers, removes the login item and quits Ivy Drive.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -96,7 +96,7 @@ private struct GeneralSettingsView: View {
             loginItemEnabled = SMAppService.mainApp.status == .enabled
         }
         .confirmationDialog(
-            "Reset MenuBarFS?",
+            "Reset Ivy Drive?",
             isPresented: $showingResetConfirmation,
             titleVisibility: .visible
         ) {

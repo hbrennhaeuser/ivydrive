@@ -1,10 +1,10 @@
-# MenuBarFS
+# Ivy Drive
 
 Keep track of your network shares on macOS and reconnect them with one click.
 
-MenuBarFS remembers your network shares (SMB, NFS, FTP, AFP, or any server address macOS can connect to), shows at a glance which ones are connected and which servers are reachable, and brings them back automatically when you start your Mac or switch networks.
+Ivy Drive remembers your network shares (SMB, NFS, FTP, AFP, or any server address macOS can connect to), shows at a glance which ones are connected and which servers are reachable, and brings them back automatically when you start your Mac or switch networks.
 
-![MenuBarFS screenshot](docs/images/screenshot.png)
+![Ivy Drive screenshot](docs/images/screenshot.png)
 
 ## Features
 

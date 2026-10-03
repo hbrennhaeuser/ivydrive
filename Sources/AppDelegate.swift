@@ -77,8 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ud.set(true, forKey: "didAskAboutLoginItem")
 
         let alert = NSAlert()
-        alert.messageText = "Open MenuBarFS When You Log In?"
-        alert.informativeText = "Would you like MenuBarFS to open automatically when you log in? You can change this later in Settings > General."
+        alert.messageText = "Open Ivy Drive When You Log In?"
+        alert.informativeText = "Would you like Ivy Drive to open automatically when you log in? You can change this later in Settings > General."
         alert.addButton(withTitle: "Enable")
         alert.addButton(withTitle: "Not Now")
         alert.alertStyle = .informational
@@ -123,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let image = NSImage(named: "MenuBarIcon")
             image?.isTemplate = true
             image?.size = NSSize(width: 18, height: 18)
-            image?.accessibilityDescription = "MenuBarFS"
+            image?.accessibilityDescription = "Ivy Drive"
             button.image = image
         }
 
@@ -496,7 +496,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
-            title: "Quit MenuBarFS",
+            title: "Quit Ivy Drive",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )

@@ -1,5 +1,5 @@
 # Variables
-APP_NAME := MenuBarFS
+APP_NAME := IvyDrive
 BUILD_DIR := build
 APP_BUNDLE := $(BUILD_DIR)/$(APP_NAME).app
 CONTENTS := $(APP_BUNDLE)/Contents
