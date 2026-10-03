@@ -28,6 +28,9 @@ VERSION      := $(shell /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionSt
 DMG          := $(BUILD_DIR)/$(APP_NAME)-$(VERSION).dmg
 DMG_VOL_NAME := $(APP_NAME) $(VERSION)
 
+VENV     := .venv
+DMGBUILD := $(VENV)/bin/dmgbuild
+
 # Default goal
 all: $(BINARY) $(PLIST)
 
@@ -47,17 +50,14 @@ $(ICON): Resources/AppIcon.icns
 	@mkdir -p "$(@D)"
 	@cp "$<" "$@"
 
-dmg: all
+$(DMGBUILD): requirements.txt
+	python3 -m venv "$(VENV)"
+	"$(VENV)/bin/pip" install --quiet -r requirements.txt
+	@touch "$@"
+
+dmg: all $(DMGBUILD)
 	@rm -f "$(DMG)"
-	create-dmg \
-		--volname "$(DMG_VOL_NAME)" \
-		--window-size 460 280 \
-		--icon-size 96 \
-		--icon "$(APP_NAME).app" 120 140 \
-		--app-drop-link 360 140 \
-		--no-internet-enable \
-		"$(DMG)" \
-		"$(APP_BUNDLE)"
+	"$(DMGBUILD)" -s dmg-settings.py -D app="$(APP_BUNDLE)" "$(DMG_VOL_NAME)" "$(DMG)"
 	@echo "DMG ready: $(DMG)"
 
 # Phony targets

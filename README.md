@@ -22,7 +22,7 @@ MenuBarFS does not store passwords. When a share requires authentication, macOS 
 
 - macOS 14.0 (Sonoma) or later on Apple Silicon
 - Xcode Command Line Tools (`xcode-select --install`)
-- [`create-dmg`](https://github.com/create-dmg/create-dmg) for `make dmg` only
+- Python 3.10 or later for `make dmg` only ([dmgbuild](https://github.com/dmgbuild/dmgbuild) is installed into `.venv/` automatically)
 
 ## Build
 

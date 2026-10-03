@@ -10,6 +10,9 @@ xcuserdata/
 *.xccheckout
 *.xcscmblueprint
 
+# Python
+.venv/
+
 # Swift Package Manager
 .build/
 Package.resolved
