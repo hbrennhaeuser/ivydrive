@@ -11,15 +11,15 @@ Each drive has an `autoConnect` master toggle plus two trigger flags. When a tri
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
 | `autoConnect` | Bool | false | Master switch; disabling it clears both trigger flags |
-| `autoConnectOnStartup` | Bool | false | Mount on app launch (30 s delay) |
-| `autoConnectOnNetworkChange` | Bool | false | Mount when network path changes to satisfied (10 s delay) |
+| `autoConnectOnStartup` | Bool | false | Mount on app launch (15 s delay) |
+| `autoConnectOnNetworkChange` | Bool | false | Mount when network path changes to satisfied (3 s delay) |
 
 All fields use `decodeIfPresent` with `false` defaults for backward compatibility with drives saved before this feature existed.
 
 ## Triggers
 
 ### App Startup
-Fires once, 30 seconds after `applicationDidFinishLaunching`. The delay lets the network stack and Keychain settle before mount attempts.
+Fires once, 15 seconds after `applicationDidFinishLaunching`. The delay lets the network stack and Keychain settle before mount attempts.
 
 ### Network Change
 `AutoConnectService` owns a single `NWPathMonitor` that runs for the lifetime of the app. The handler fires whenever the network path changes. A trigger is scheduled when:
@@ -28,11 +28,11 @@ Fires once, 30 seconds after `applicationDidFinishLaunching`. The delay lets the
 
 The second condition means WiFi-only → WiFi+Ethernet (satisfied → satisfied, different interfaces) also triggers a reconnect, not just offline → online transitions. The initial path report on startup is intentionally skipped (`previousPath == nil` guard) — the startup trigger covers that case.
 
-Delay: **10 seconds**, debounced.
+Delay: **3 seconds**, debounced.
 
 ## Debounce
 
-Both triggers share a single `DispatchWorkItem` (`pendingWork`). Each call to `schedule(delay:trigger:)` cancels the pending item and schedules a new one. If multiple triggers fire in quick succession (e.g. network change fires during the 30 s startup window), only the most recent one executes.
+Both triggers share a single `DispatchWorkItem` (`pendingWork`). Each call to `schedule(delay:trigger:)` cancels the pending item and schedules a new one. If multiple triggers fire in quick succession (e.g. network change fires during the 15 s startup window), only the most recent one executes.
 
 ## Mount Flow
 

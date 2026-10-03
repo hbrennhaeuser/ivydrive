@@ -1,6 +1,6 @@
 # Drive Availability Checks
 
-How MenuBarFS determines whether an unconfigured network drive's host is reachable before the user attempts to mount it.
+How MenuBarFS determines whether an unmounted network drive's host is reachable before the user attempts to mount it.
 
 ## Overview
 
